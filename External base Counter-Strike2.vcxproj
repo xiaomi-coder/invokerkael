@@ -196,6 +196,7 @@
     <ClInclude Include="src\features\esp\PlayerGlow.h" />
     <ClInclude Include="src\features\esp\WeaponIcons.h" />
     <ClInclude Include="src\features\radar\Radar.h" />
+    <ClInclude Include="src\features\radar\WebRadar.h" />
     <ClInclude Include="src\features\skinchanger\SkinChanger.h" />
     <ClInclude Include="src\features\triggerbot\Triggerbot.h" />
     <ClInclude Include="src\features\world\World.h" />
@@ -246,6 +247,7 @@
     <ClCompile Include="src\features\esp\PlayerGlow.cpp" />
     <ClCompile Include="src\features\esp\WeaponIcons.cpp" />
     <ClCompile Include="src\features\radar\Radar.cpp" />
+    <ClCompile Include="src\features\radar\WebRadar.cpp" />
     <ClCompile Include="src\features\skinchanger\SkinChanger.cpp" />
     <ClCompile Include="src\features\triggerbot\Triggerbot.cpp" />
     <ClCompile Include="src\features\world\World.cpp" />

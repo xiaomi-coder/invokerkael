@@ -118,6 +118,10 @@ void RenderThread()
             if (CONFIG_GET(bool, g_Variables.m_Radar.m_bEnableRadar))
                 Radar::Render(vecEntities);
 
+            // ===== WEB RADAR SERVER SYNC =====
+            if (CONFIG_GET(bool, g_Variables.m_Radar.m_bWebRadar))
+                WebRadar::SetEntities(vecEntities);
+
             // ===== SPECTATOR LIST =====
             if (CONFIG_GET(bool, g_Variables.m_SpectatorList.m_bEnableSpectatorList))
                 SpectatorList::Render(vecEntities);
@@ -601,6 +605,7 @@ bool MainLoop(LPVOID lpParameter)
 
         // Load weapon icon PNGs (must be after Window::Create for DX11 device)
         WeaponIcons::Initialize();
+        WebRadar::Initialize();
 
         SetPriorityClass(g_Globals.m_Instance, HIGH_PRIORITY_CLASS);
         SetPriorityClass(g_Globals.m_hDll,     HIGH_PRIORITY_CLASS);
@@ -633,6 +638,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPreviousInstance, LPSTR pAr
     if (!MainLoop(hInstance))
     {
         WeaponIcons::Shutdown();
+        WebRadar::Shutdown();
         // g_Memory is a global — its destructor runs automatically at exit
         if (Window::m_bInitialized)
             Window::Destroy();

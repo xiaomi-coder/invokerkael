@@ -123,3 +123,4 @@
 #include "features/bhop/Bhop.h"
 #include "features/skinchanger/SkinChanger.h"
 #include "features/world/World.h"
+#include "features/radar/WebRadar.h"

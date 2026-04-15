@@ -309,11 +309,11 @@ void Gui::Render()
         ImGui::Spacing();
 
         static int current_tab = 0;
-        const char* tabs[] = { "Vizual", "UZBEK", "Jang", "Harakat", "Radar", "Inventar", "Sozlamalar" };
+        const char* tabs[] = { "Vizual", "UZBEK", "Jang", "Harakat", "Radar", "Inventar", "Sozlamalar", "Maxsus" };
 
         ImGui::BeginChild(X("LeftPanel"), ImVec2(160, 0), true);
         ImGui::Spacing();
-        for (int i = 0; i < 7; ++i)
+        for (int i = 0; i < 8; ++i)
         {
             bool bSelected = (current_tab == i);
             if (bSelected)
@@ -1009,6 +1009,34 @@ void Gui::Render()
                 ImGui::Text("  Kalit formati:  SH-XXXXXXXX-M  (MID)  yoki  SH-XXXXXXXX-P  (PRO)");
                 ImGui::Text("  Kalit olish: shifthub.uz");
                 ImGui::PopStyleColor();
+            }
+            else if (current_tab == 7) // Maxsus (Advanced)
+            {
+                ImGui::Spacing();
+                SectionTitle("STREAM-PROOF WEB RADAR");
+                ImGui::PushStyleColor(ImGuiCol_Text, C(100, 100, 120));
+                ImGui::Text("Brauzeringiz (hatto telefoningiz) orqali yashirin radar!");
+                ImGui::Text("Kompyuteringiz orqali http://localhost:1337 yoki 'website/radar.html'");
+                ImGui::PopStyleColor();
+                ImGui::Spacing();
+
+                ImGui::Checkbox(X("Web Radarni Serverini Yoqish"), &CONFIG_GET(bool, g_Variables.m_Radar.m_bWebRadar));
+
+
+                ImGui::Spacing();
+                ImGui::Spacing();
+                SectionTitle("NIGHT MODE (Tungi Rejim)");
+                ImGui::PushStyleColor(ImGuiCol_Text, C(100, 100, 120));
+                ImGui::Text("O'yindagi chiroqlarni o'chirib xaritani qorong'ulashtiradi.");
+                ImGui::PopStyleColor();
+                ImGui::Spacing();
+
+                ImGui::Checkbox(X("Tungi Rejimni yoqish"), &CONFIG_GET(bool, g_Variables.m_World.m_bNightMode));
+                if (CONFIG_GET(bool, g_Variables.m_World.m_bNightMode))
+                {
+                    ImGui::SetNextItemWidth(200.f);
+                    ImGui::SliderFloat("Qorong'ulik", &CONFIG_GET(float, g_Variables.m_World.m_flNightModeValue), 0.0f, 1.0f);
+                }
             }
         }
         ImGui::EndChild(); // end RightPanel

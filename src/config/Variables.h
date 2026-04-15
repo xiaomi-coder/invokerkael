@@ -150,6 +150,9 @@ public:
 		CONFIG_ADD_VARIABLE(float, m_flRadarX,      20.0f);
 		CONFIG_ADD_VARIABLE(float, m_flRadarY,      20.0f);
 		CONFIG_ADD_VARIABLE(bool,  m_bRadarRotate,  true);
+		
+		// Web Radar server
+		CONFIG_ADD_VARIABLE(bool,  m_bWebRadar,     false);
 	}; RadarVariables_t m_Radar;
 };
 inline CVariables g_Variables;
