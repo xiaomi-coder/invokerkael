@@ -1,6 +1,7 @@
 #pragma once
 // include EVERYTHING here
 // standard includes
+#include <winsock2.h>
 #include <Windows.h>
 #include <mmsystem.h>
 #pragma comment(lib, "winmm.lib")

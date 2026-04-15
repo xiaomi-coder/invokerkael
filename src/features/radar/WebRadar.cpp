@@ -139,10 +139,14 @@ namespace WebRadar
 
             C_CSPlayerPawn* pPawn = reinterpret_cast<C_CSPlayerPawn*>(ent.m_pEntity);
             if (pPawn == pLocalPawn || pPawn->m_iHealth() <= 0) continue;
+            
+            CGameSceneNode* pNode = pPawn->m_pGameSceneNode();
+            if (!pNode) continue;
 
-            bool isEnemy = (pPawn->m_iTeamNum() != g_Globals.m_LocalPlayer.m_iTeamNum);
+            uint8_t localTeam = pLocalPawn ? pLocalPawn->m_iTeamNum() : 0;
+            bool isEnemy = (pPawn->m_iTeamNum() != localTeam);
 
-            Vector pos = pPawn->m_vOldOrigin();
+            Vector pos = pNode->m_vecAbsOrigin();
 
             if (!first) json += ",";
             first = false;
@@ -156,8 +160,9 @@ namespace WebRadar
         // Add local player as the last element with special flag
         if (pLocalPawn)
         {
-            Vector pos = pLocalPawn->m_vOldOrigin();
-            QAngle viewAngles = g_Globals.m_LocalPlayer.m_vecViewAngles;
+            CGameSceneNode* pLocalNode = pLocalPawn->m_pGameSceneNode();
+            Vector pos = pLocalNode ? pLocalNode->m_vecAbsOrigin() : Vector();
+            QAngle viewAngles = g_Interfaces.m_CSGOInput.m_angViewAngle;
             if (!first) json += ",";
             char buf[256];
             snprintf(buf, sizeof(buf), "{\"x\":%.1f,\"y\":%.1f,\"enemy\":false,\"hp\":%d,\"local\":true,\"yaw\":%.1f}",
