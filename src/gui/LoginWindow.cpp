@@ -3,7 +3,7 @@
 using json = nlohmann::json;
 
 // =====================================================================
-//  KAEL_CHEAT  ::  CYBERPUNK LOGIN / LOADER
+//  KaeL CS2  ::  CYBERPUNK LOGIN / LOADER
 // =====================================================================
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -116,7 +116,7 @@ bool LoginWindow::Create()
 
     // Build wide title with version
     wchar_t wszTitle[64];
-    swprintf_s(wszTitle, L"KAEL_CHEAT v%hs", SHIFTHUB_VERSION);
+    swprintf_s(wszTitle, L"KaeL CS2 v%hs", SHIFTHUB_VERSION);
     m_hWnd = CreateWindowExW(0, m_wc.lpszClassName, wszTitle,
         WS_POPUP | WS_VISIBLE, (scrW - wndW) / 2, (scrH - wndH) / 2, wndW, wndH,
         NULL, NULL, m_wc.hInstance, NULL);
@@ -344,16 +344,16 @@ bool LoginWindow::Run()
             // --- wordmark ---
             {
                 if (Fonts::Title) ImGui::PushFont(Fonts::Title);
-                ImVec2 s1 = ImGui::CalcTextSize("KAEL");
-                ImVec2 s2 = ImGui::CalcTextSize("_CHEAT");
+                ImVec2 s1 = ImGui::CalcTextSize("KaeL");
+                ImVec2 s2 = ImGui::CalcTextSize(" CS2");
                 float x0 = (W - (s1.x + s2.x)) * 0.5f;
-                dl->AddText(ImVec2(x0, 196.f), UI::COL_TEXT, "KAEL");
-                dl->AddText(ImVec2(x0 + s1.x, 196.f), UI::COL_MAGENTA, "_CHEAT");
+                dl->AddText(ImVec2(x0, 196.f), UI::COL_TEXT, "KaeL");
+                dl->AddText(ImVec2(x0 + s1.x, 196.f), UI::COL_MAGENTA, " CS2");
                 if (Fonts::Title) ImGui::PopFont();
             }
             {
                 char szSub[96];
-                snprintf(szSub, sizeof(szSub), "CS2  EXTERNAL   //   v%s", SHIFTHUB_VERSION);
+                snprintf(szSub, sizeof(szSub), "EXTERNAL   //   v%s", SHIFTHUB_VERSION);
                 CenteredText(dl, W, 244.f, szSub, UI::COL_TEXT_FAINT, Fonts::Mono);
             }
 
@@ -417,7 +417,7 @@ bool LoginWindow::Run()
 
             // --- footer ---
             CenteredText(dl, W, H - 52.f, "1HP_KAEL", UI::Fade(UI::COL_CYAN, 0.6f), Fonts::Mono);
-            CenteredText(dl, W, H - 32.f, "KAEL_CHEAT", UI::COL_TEXT_FAINT, Fonts::Small);
+            CenteredText(dl, W, H - 32.f, "KaeL CS2", UI::COL_TEXT_FAINT, Fonts::Small);
         }
 
         // ===============================================================
@@ -434,7 +434,7 @@ bool LoginWindow::Run()
             }
             {
                 char szHdr[64];
-                snprintf(szHdr, sizeof(szHdr), "KAEL_CHEAT  v%s", SHIFTHUB_VERSION);
+                snprintf(szHdr, sizeof(szHdr), "KaeL CS2  v%s", SHIFTHUB_VERSION);
                 CenteredText(dl, W, 74.f, szHdr, UI::COL_TEXT, Fonts::Mono);
             }
             UI::NeonLine(dl, ImVec2(40.f, 96.f), W - 80.f, UI::Fade(UI::COL_CYAN, 0.45f), 1.f);
@@ -628,7 +628,7 @@ bool LoginWindow::Run()
 
             // --- footer ---
             CenteredText(dl, W, H - 46.f, "1HP_KAEL", UI::Fade(UI::COL_CYAN, 0.6f), Fonts::Mono);
-            CenteredText(dl, W, H - 26.f, "KAEL_CHEAT  ·  @bakoev_71", UI::COL_TEXT_FAINT, Fonts::Small);
+            CenteredText(dl, W, H - 26.f, "KaeL CS2  ·  @bakoev_71", UI::COL_TEXT_FAINT, Fonts::Small);
         }
 
         // ===============================================================

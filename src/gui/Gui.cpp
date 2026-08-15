@@ -5,7 +5,7 @@
 #include "../features/thirdperson/ThirdPerson.h"
 
 // =====================================================================
-//  KAEL_CHEAT  ::  CYBERPUNK MENU
+//  KaeL CS2  ::  CYBERPUNK MENU
 //  Layout:  [ header ] [ nav rail | page ] [ status bar ]
 // =====================================================================
 
@@ -1834,16 +1834,16 @@ void Gui::Render()
         dl->AddNgon(c, 10.f, UI::Fade(UI::COL_MAGENTA, 0.55f), 6, 1.f);
         UI::Icon(dl, c, 12.f, UI::ICON_BOLT, UI::Fade(UI::COL_CYAN, pulse));
 
-        // brand:  KAEL_CHEAT  (ikki rangli wordmark)
+        // brand:  KaeL CS2  (ikki rangli wordmark)
         if (Fonts::Title) ImGui::PushFont(Fonts::Title);
-        ImVec2 bs = ImGui::CalcTextSize("KAEL");
-        dl->AddText(ImVec2(wp.x + 58.f, wp.y + 10.f), UI::COL_TEXT, "KAEL");
-        dl->AddText(ImVec2(wp.x + 58.f + bs.x, wp.y + 10.f), UI::COL_MAGENTA, "_CHEAT");
+        ImVec2 bs = ImGui::CalcTextSize("KaeL");
+        dl->AddText(ImVec2(wp.x + 58.f, wp.y + 10.f), UI::COL_TEXT, "KaeL");
+        dl->AddText(ImVec2(wp.x + 58.f + bs.x, wp.y + 10.f), UI::COL_MAGENTA, " CS2");
         if (Fonts::Title) ImGui::PopFont();
 
         if (Fonts::Mono) ImGui::PushFont(Fonts::Mono);
         char szSub[96];
-        snprintf(szSub, sizeof(szSub), "CS2 EXTERNAL   v%s", SHIFTHUB_VERSION);
+        snprintf(szSub, sizeof(szSub), "EXTERNAL   v%s", SHIFTHUB_VERSION);
         dl->AddText(ImVec2(wp.x + 60.f, wp.y + 37.f), UI::COL_TEXT_FAINT, szSub);
         if (Fonts::Mono) ImGui::PopFont();
 
@@ -1982,7 +1982,7 @@ void Gui::Render()
         float y = wp.y + ws.y - flFooter;
         float ty = y + (flFooter - ImGui::GetTextLineHeight()) * 0.5f;
 
-        dl->AddText(ImVec2(wp.x + 16.f, ty), UI::Fade(UI::COL_CYAN, 0.75f), "KAEL_CHEAT");
+        dl->AddText(ImVec2(wp.x + 16.f, ty), UI::Fade(UI::COL_CYAN, 0.75f), "KaeL CS2");
 
         const char* szMid = X("DELETE = panic  ·  END = chiqish");
         ImVec2 ms = ImGui::CalcTextSize(szMid);

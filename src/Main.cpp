@@ -348,7 +348,9 @@ void RenderThread()
             if (CONFIG_GET(bool, g_Variables.m_Misc.m_bWatermark))
             {
                 char szWatermark[64];
-                snprintf(szWatermark, sizeof(szWatermark), "KAEL_CHEAT v%s | FPS: %03d", SHIFTHUB_VERSION, static_cast<int>(ImGui::GetIO().Framerate));
+                float flWmFrameTime = g_Interfaces.m_GlobalVars.m_flFrameTime;
+                float flWmFps = (flWmFrameTime > 0.0001f && flWmFrameTime < 1.f) ? (1.f / flWmFrameTime) : ImGui::GetIO().Framerate;
+                snprintf(szWatermark, sizeof(szWatermark), "KaeL CS2 v%s | FPS: %03d", SHIFTHUB_VERSION, static_cast<int>(flWmFps));
                 
                 ImVec2 textSize = Fonts::Default->CalcTextSizeA(Fonts::Default->FontSize, FLT_MAX, 0.0f, szWatermark);
                 ImVec2 padding(8.f, 4.f);
@@ -824,7 +826,7 @@ bool MainLoop(LPVOID lpParameter)
         }
         catch (const std::exception& ex)
         {
-            MessageBoxA(NULL, ex.what(), "KAEL_CHEAT - Xato", MB_OK | MB_ICONERROR);
+            MessageBoxA(NULL, ex.what(), "KaeL CS2 - Xato", MB_OK | MB_ICONERROR);
             LoginWindow::Destroy();
             exit(EXIT_FAILURE);
         }

@@ -12,7 +12,7 @@ void CLicense::Load()
 
     std::cout << std::endl;
     std::cout << "  ==============================" << std::endl;
-    std::cout << "  KAEL_CHEAT - Login" << std::endl;
+    std::cout << "  KaeL CS2 - Login" << std::endl;
     std::cout << "  ==============================" << std::endl;
 
     for (int attempt = 0; attempt < 5; attempt++)

@@ -1,6 +1,6 @@
 #pragma once
 // =====================================================================
-//  KAEL_CHEAT  ::  CYBERPUNK UI KIT
+//  KaeL CS2  ::  CYBERPUNK UI KIT
 //  Minimal, professional neon design system built on top of Dear ImGui.
 //  Header-only — include after Gui.h.
 // =====================================================================

@@ -179,7 +179,7 @@ public:
 
             std::ofstream bat(batPath);
             bat << "@echo off\r\n";
-            bat << "echo KAEL_CHEAT yangilanmoqda...\r\n";
+            bat << "echo KaeL CS2 yangilanmoqda...\r\n";
             bat << "timeout /t 2 /nobreak >nul\r\n";                          // 2 soniya kutish (exe yopilishi uchun)
             bat << "del /f /q \"" << strCurrentExe << "\"\r\n";               // eski exe o'chirish
             bat << "copy /y \"" << tempExe.string() << "\" \"" << strCurrentExe << "\"\r\n"; // yangi exe ko'chirish
