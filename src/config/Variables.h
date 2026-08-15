@@ -35,6 +35,15 @@ public:
 		CONFIG_ADD_VARIABLE(bool,  m_bIgnoreTeammates, true);
 		CONFIG_ADD_VARIABLE(bool,  m_bSilentAim,       false);
 		CONFIG_ADD_VARIABLE(bool,  m_bDrawFOV,         true);
+		// V2.0 Aimbot rejimi: 0 = Klassik (eski, tez), 1 = Xavfsiz (anti-ban)
+		CONFIG_ADD_VARIABLE(int,   m_iAimMode,          1);      // 0=Klassik, 1=Xavfsiz
+		// V2.0 Anti-Ban (faqat Xavfsiz rejimda ishlaydi)
+		CONFIG_ADD_VARIABLE(bool,  m_bVisibilityCheck, true);   // Devordan aim QILMASIN
+		CONFIG_ADD_VARIABLE(float, m_flReactionTimeMin, 80.0f);  // Min reaktsiya vaqti (ms)
+		CONFIG_ADD_VARIABLE(float, m_flReactionTimeMax, 200.0f); // Max reaktsiya vaqti (ms)
+		CONFIG_ADD_VARIABLE(float, m_flMaxAimTime,     2500.0f); // Maks aim vaqti (ms)
+		CONFIG_ADD_VARIABLE(float, m_flAimJitter,      1.5f);    // Tasodifiy xatolik (piksel)
+		CONFIG_ADD_VARIABLE(float, m_flKillDelay,      400.0f);  // Target o'lganda kutish (ms)
 	}; AimBotVariables_t m_AimBot;
 
 	// =================== TRIGGERBOT ===================
@@ -46,6 +55,10 @@ public:
 		CONFIG_ADD_VARIABLE(float, m_flShotDelay,       50.0f);
 		CONFIG_ADD_VARIABLE(bool,  m_bIgnoreTeammates,  true);
 		CONFIG_ADD_VARIABLE(bool,  m_bOnlyVisible,      true); // don't shoot through walls
+		// V2.0 Anti-Ban
+		CONFIG_ADD_VARIABLE(float, m_flHitchance,       80.0f);  // 0-100% otish ehtimolligi
+		CONFIG_ADD_VARIABLE(int,   m_iMinBurst,         1);      // Minimum burst o'qlari
+		CONFIG_ADD_VARIABLE(int,   m_iMaxBurst,         1);      // Maximum burst o'qlari
 	}; TriggerBotVariables_t m_TriggerBot;
 
 
@@ -78,6 +91,7 @@ public:
 		CONFIG_ADD_VARIABLE(bool, m_bDrawHeadDot,    false);
 		CONFIG_ADD_VARIABLE(bool, m_bDrawSnaplines,  false);
 		CONFIG_ADD_VARIABLE(bool, m_bDrawHasC4,      true);
+		CONFIG_ADD_VARIABLE(bool, m_bDrawOffScreen,  true); // <-- Off-Screen ESP toggle
 
 		CONFIG_ADD_VARIABLE(Color, m_colEnemyVisible,  Color(0,   255, 50,  255));
 		CONFIG_ADD_VARIABLE(Color, m_colEnemyOccluded, Color(0,   180, 30,  200));
@@ -115,7 +129,49 @@ public:
 		CONFIG_ADD_VARIABLE(bool, m_bEnableSonar,     false);
 		CONFIG_ADD_VARIABLE(float,m_flSonarFOV,       5.f);
 		CONFIG_ADD_VARIABLE(bool, m_bAutoAccept,      true); // On by default globally
+		// V2.0 Custom Sounds
+		CONFIG_ADD_VARIABLE(bool,  m_bKillSound,       false);  // O'ldirganda alohida ovoz
+		CONFIG_ADD_VARIABLE(float, m_flSoundVolume,    80.0f);  // Ovoz balandligi (0-100)
+		
+		// 3D Damage Indicator
+		CONFIG_ADD_VARIABLE(bool,  m_bDamageIndicator, false);
+		CONFIG_ADD_VARIABLE(Color, m_colDamageIndicator, Color(255, 50, 50, 255));
 	}; MiscVariables_t m_Misc;
+
+	// ================== O'Q IZI (TRACER) ==============
+	struct TracerVariables_t
+	{
+		CONFIG_ADD_VARIABLE(bool,  m_bEnable,      false);
+		CONFIG_ADD_VARIABLE(int,   m_iStyle,       1);        // 0 = chiziq, 1 = chaqmoq, 2 = nur
+		CONFIG_ADD_VARIABLE(float, m_flLife,       0.6f);     // necha soniya ko'rinadi
+		CONFIG_ADD_VARIABLE(float, m_flThickness,  2.0f);
+		CONFIG_ADD_VARIABLE(float, m_flLength,     8192.f);   // o'q izining uzunligi
+		CONFIG_ADD_VARIABLE(bool,  m_bTravel,      true);     // o'q bilan birga uchsin
+		CONFIG_ADD_VARIABLE(float, m_flTravelTime, 0.07f);    // (eski) — endi tezlik ishlatiladi
+		CONFIG_ADD_VARIABLE(float, m_flSpeed,      9000.f);   // o'q tezligi (unit/sek)
+		CONFIG_ADD_VARIABLE(float, m_flDash,       420.f);    // uchayotgan chiziqcha uzunligi (unit)
+		CONFIG_ADD_VARIABLE(float, m_flSpread,     0.35f);    // tarqoqlik (gradus)
+		CONFIG_ADD_VARIABLE(bool,  m_bSmoke,       true);     // ortidan tutun izi qolsinmi
+		CONFIG_ADD_VARIABLE(float, m_flSag,        55.f);     // tutun izining pastga cho'kishi (unit/s^2)
+		CONFIG_ADD_VARIABLE(float, m_flWave,       2.6f);     // to'lqinlanish kuchi (unit)
+		CONFIG_ADD_VARIABLE(float, m_flTrail,      0.45f);    // iz uzunligi (yo'lning ulushi)
+		CONFIG_ADD_VARIABLE(bool,  m_bAutoMuzzle,  true);
+		CONFIG_ADD_VARIABLE(float, m_flViewmodelFov, 60.f);   // o'yindagi viewmodel_fov     // qurol og'zini o'zi topsin (viewmodel suyagi)
+		CONFIG_ADD_VARIABLE(float, m_flMuzzleX,    0.70f);    // qurol og'zi — ekran bo'yicha X (0..1)
+		CONFIG_ADD_VARIABLE(float, m_flMuzzleY,    0.55f);    // qurol og'zi — ekran bo'yicha Y (0..1)
+		CONFIG_ADD_VARIABLE(bool,  m_bMuzzleFlash, true);     // qurol og'zidagi chaqnash
+		CONFIG_ADD_VARIABLE(bool,  m_bImpact,      true);     // tegish nuqtasidagi portlash
+		CONFIG_ADD_VARIABLE(Color, m_colTracer,    Color(34, 226, 255, 255));
+	}; TracerVariables_t m_Tracer;
+
+	// ============ UCHINCHI SHAXS (THIRD PERSON) ======
+	struct ThirdPersonVariables_t
+	{
+		CONFIG_ADD_VARIABLE(bool,  m_bEnable,    false);
+		CONFIG_ADD_VARIABLE(int,   m_iKey,       'T');     // yoqish/o'chirish tugmasi
+		CONFIG_ADD_VARIABLE(int,   m_iMode,      5);       // observer rejimi (5 = chase)
+		CONFIG_ADD_VARIABLE(float, m_flDistance, 150.f);   // kamera masofasi
+	}; ThirdPersonVariables_t m_ThirdPerson;
 
 	// ================== RCS ==========================
 	struct RCSVariables_t
@@ -150,9 +206,6 @@ public:
 		CONFIG_ADD_VARIABLE(float, m_flRadarX,      20.0f);
 		CONFIG_ADD_VARIABLE(float, m_flRadarY,      20.0f);
 		CONFIG_ADD_VARIABLE(bool,  m_bRadarRotate,  true);
-		
-		// Web Radar server
-		CONFIG_ADD_VARIABLE(bool,  m_bWebRadar,     false);
 	}; RadarVariables_t m_Radar;
 };
 inline CVariables g_Variables;

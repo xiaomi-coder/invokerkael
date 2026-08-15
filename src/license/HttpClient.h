@@ -46,6 +46,9 @@ namespace Http
             WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
         if (!hSession) return resp;
 
+        // Set timeouts: 5s resolve, 5s connect, 5s send, 5s receive
+        WinHttpSetTimeouts(hSession, 5000, 5000, 5000, 5000);
+
         INTERNET_PORT port = useSSL ? INTERNET_DEFAULT_HTTPS_PORT : INTERNET_DEFAULT_HTTP_PORT;
         HINTERNET hConnect = WinHttpConnect(hSession, host.c_str(), port, 0);
         if (!hConnect) { WinHttpCloseHandle(hSession); return resp; }

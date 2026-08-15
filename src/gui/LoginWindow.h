@@ -21,4 +21,10 @@ namespace LoginWindow
     inline ID3D11DeviceContext* m_pContext = nullptr;
     inline IDXGISwapChain* m_pSwapChain = nullptr;
     inline ID3D11RenderTargetView* m_pRTV = nullptr;
+
+    // CT / T faction portraits for the login hero background
+    inline ID3D11ShaderResourceView* m_pCtTexture = nullptr;
+    inline ID3D11ShaderResourceView* m_pTTexture   = nullptr;
+    inline int m_iCtTexW = 0, m_iCtTexH = 0;
+    inline int m_iTTexW = 0, m_iTTexH = 0;
 }

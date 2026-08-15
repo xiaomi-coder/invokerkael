@@ -102,6 +102,8 @@ C_CSPlayerPawn* Aimbot::FindBestTarget(const std::vector<EntityObject_t>& vecEnt
 
     float flMaxFOV = CONFIG_GET(float, g_Variables.m_AimBot.m_flFOV);
     bool  bIgnoreTeam = CONFIG_GET(bool, g_Variables.m_AimBot.m_bIgnoreTeammates);
+    int   iAimMode = CONFIG_GET(int, g_Variables.m_AimBot.m_iAimMode);
+    bool  bVisCheck = (iAimMode == 1) && CONFIG_GET(bool, g_Variables.m_AimBot.m_bVisibilityCheck);
 
     // Screen center = crosshair position
     float flScreenCX = Window::m_iWidth  * 0.5f;
@@ -122,6 +124,20 @@ C_CSPlayerPawn* Aimbot::FindBestTarget(const std::vector<EntityObject_t>& vecEnt
         if (!pPawn || !pPawn->IsAlive()) continue;
 
         if (bIgnoreTeam && pPawn->m_iTeamNum() == pLocalPawn->m_iTeamNum()) continue;
+
+        // V2.0: Visibility Check — skip enemies behind walls
+        if (bVisCheck)
+        {
+            Vector vecEye = pLocalPawn->GetEyePosition();
+            CGameSceneNode* pNodeVis = pPawn->m_pGameSceneNode();
+            if (pNodeVis)
+            {
+                Vector vecTargetVis = pNodeVis->m_vecAbsOrigin();
+                vecTargetVis.z += 40.f; // chest height
+                if (!g_Utilities.IsVisible(pPawn, vecEye, vecTargetVis))
+                    continue; // Devor ortida — o'tkazib yubor
+            }
+        }
 
         Vector vecTarget = GetHitboxPosition(pPawn, CONFIG_GET(int, g_Variables.m_AimBot.m_iHitbox));
         if (vecTarget.IsZero()) continue;
@@ -161,6 +177,33 @@ void Aimbot::DrawFOVCircle()
 
     Draw::AddCircle(center, flRadius, Color(0, 255, 80, 180), 64, DRAW_CIRCLE_NONE);
 }
+
+// -----------------------------------------------------------------------
+// V2.0: Random helpers for anti-ban
+// -----------------------------------------------------------------------
+static std::mt19937& GetAimRNG()
+{
+    static std::mt19937 rng(static_cast<unsigned>(
+        std::chrono::high_resolution_clock::now().time_since_epoch().count() ^ 0xDEADBEEF));
+    return rng;
+}
+
+static float AimRandomFloat(float flMin, float flMax)
+{
+    std::uniform_real_distribution<float> dist(flMin, flMax);
+    return dist(GetAimRNG());
+}
+
+// -----------------------------------------------------------------------
+// V2.0: Anti-ban state tracking
+// -----------------------------------------------------------------------
+static C_CSPlayerPawn* s_pLastTarget      = nullptr;
+static CTimer          s_timerReaction(false);
+static CTimer          s_timerAimDuration(false);
+static CTimer          s_timerKillDelay(false);
+static float           s_flCurrentReactionDelay = 0.f;
+static bool            s_bWaitingReaction  = false;
+static bool            s_bWaitingKillDelay = false;
 
 // -----------------------------------------------------------------------
 // Debug counter to limit console spam (print every ~200 calls = ~1 sec)
@@ -222,14 +265,81 @@ void Aimbot::Run(const std::vector<EntityObject_t>& vecEntities)
 
     if (!(GetAsyncKeyState(iAimKey) & 0x8000)) return;
 
+    // V2.0: Aimbot rejimini aniqlash
+    int iAimMode = CONFIG_GET(int, g_Variables.m_AimBot.m_iAimMode);
+    // iAimMode: 0 = Klassik (eski, tez, anti-ban yo'q)
+    //           1 = Xavfsiz (V2.0 — reaction, jitter, kill delay, vis check)
+
+    // V2.0: Kill Delay — faqat Xavfsiz rejimda
+    if (iAimMode == 1 && s_bWaitingKillDelay)
+    {
+        float flKillDelay = CONFIG_GET(float, g_Variables.m_AimBot.m_flKillDelay);
+        if (s_timerKillDelay.Elapsed() < static_cast<long long>(flKillDelay))
+            return;
+        s_bWaitingKillDelay = false;
+    }
+
     float flBestDist;
     C_CSPlayerPawn* pTarget = FindBestTarget(vecEntities, flBestDist);
     if (!pTarget)
     {
+        s_pLastTarget = nullptr;
+        s_bWaitingReaction = false;
         if (s_iDebugCounter++ % 200 == 0)
             std::cout << X("  [AIM] Target topilmadi (entities=") << vecEntities.size()
                       << X(", FOV=") << CONFIG_GET(float, g_Variables.m_AimBot.m_flFOV) << X(")") << std::endl;
         return;
+    }
+
+    // V2.0: Reaction Time + Kill Delay — faqat Xavfsiz rejimda
+    if (iAimMode == 1)
+    {
+        if (pTarget != s_pLastTarget)
+        {
+            // Eski target o'lgan bo'lishi mumkin — kill delay
+            if (s_pLastTarget != nullptr)
+            {
+                bool bOldTargetFound = false;
+                for (const EntityObject_t& obj : vecEntities)
+                {
+                    if (obj.m_eType != EEntityType::ENTITY_PLAYER) continue;
+                    CCSPlayerController* pCtrl = reinterpret_cast<CCSPlayerController*>(obj.m_pEntity);
+                    if (!pCtrl) continue;
+                    C_CSPlayerPawn* pPawn = reinterpret_cast<C_CSPlayerPawn*>(pCtrl->m_hPawn().Get());
+                    if (pPawn == s_pLastTarget && pPawn && pPawn->IsAlive())
+                    { bOldTargetFound = true; break; }
+                }
+                if (!bOldTargetFound)
+                {
+                    s_bWaitingKillDelay = true;
+                    s_timerKillDelay.Reset();
+                    s_pLastTarget = nullptr;
+                    s_bWaitingReaction = false;
+                    return;
+                }
+            }
+
+            s_pLastTarget = pTarget;
+            s_bWaitingReaction = true;
+            s_timerReaction.Reset();
+            s_timerAimDuration.Reset();
+            float flMinReact = CONFIG_GET(float, g_Variables.m_AimBot.m_flReactionTimeMin);
+            float flMaxReact = CONFIG_GET(float, g_Variables.m_AimBot.m_flReactionTimeMax);
+            s_flCurrentReactionDelay = AimRandomFloat(flMinReact, flMaxReact);
+        }
+
+        // Reaction Time kutish
+        if (s_bWaitingReaction)
+        {
+            if (s_timerReaction.Elapsed() < static_cast<long long>(s_flCurrentReactionDelay))
+                return;
+            s_bWaitingReaction = false;
+        }
+
+        // Max Aim Time
+        float flMaxAimTime = CONFIG_GET(float, g_Variables.m_AimBot.m_flMaxAimTime);
+        if (flMaxAimTime > 0.f && s_timerAimDuration.Elapsed() > static_cast<long long>(flMaxAimTime))
+            return;
     }
 
     Vector vecTarget = GetHitboxPosition(pTarget, CONFIG_GET(int, g_Variables.m_AimBot.m_iHitbox));
@@ -246,6 +356,17 @@ void Aimbot::Run(const std::vector<EntityObject_t>& vecEntities)
     float flDeltaY = screenTarget.y - flScreenCY;
 
     if (!std::isfinite(flDeltaX) || !std::isfinite(flDeltaY)) return;
+
+    // V2.0: Aim Jitter — faqat Xavfsiz rejimda
+    if (iAimMode == 1)
+    {
+        float flJitter = CONFIG_GET(float, g_Variables.m_AimBot.m_flAimJitter);
+        if (flJitter > 0.f)
+        {
+            flDeltaX += AimRandomFloat(-flJitter, flJitter);
+            flDeltaY += AimRandomFloat(-flJitter, flJitter);
+        }
+    }
 
     // Apply smoothing (divide pixel delta by smooth factor)
     float flSmooth = CONFIG_GET(float, g_Variables.m_AimBot.m_flSmooth);
@@ -264,6 +385,5 @@ void Aimbot::Run(const std::vector<EntityObject_t>& vecEntities)
         std::cout << X("  [AIM] MOVING dx=") << flDeltaX << X(" dy=") << flDeltaY << std::endl;
 
     // Use mouse_event — works with CS2 Raw Input (unlike SendInput)
-    // IMPORTANT: use (LONG) cast, NOT (DWORD), because delta can be NEGATIVE
     mouse_event(MOUSEEVENTF_MOVE, static_cast<LONG>(flDeltaX), static_cast<LONG>(flDeltaY), 0, 0);
 }

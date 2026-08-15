@@ -7,6 +7,7 @@ bool SchemaSystem::Setup()
     if (!g_Memory.ReadMemoryRaw(uSchemaInterfaceAddress + CS_OFFSETOF(CSchemaSystem, m_pScopeArray), &uSchemaSystemScopeArrayPtr, sizeof(std::uintptr_t)))
     {
         std::cout << X("Failed to read scope array ptr") << std::endl;
+        ApplyFallbacks();
         return false;
     }
   
@@ -16,6 +17,7 @@ bool SchemaSystem::Setup()
     if (!g_Memory.ReadMemoryRaw(uSchemaSystemScopeArrayPtr, ppScopeArray, (nScopeSize * sizeof(void*))))
     {
         std::cout << X("Failed to read scope array") << std::endl;
+        ApplyFallbacks();
         return false;
     }
 
@@ -25,7 +27,8 @@ bool SchemaSystem::Setup()
         if (!g_Memory.ReadMemoryRaw(ppScopeArray[i], &schemaScope, sizeof(CSchemaSystemTypeScope)) || !schemaScope.m_pDeclaredClasses)
             continue;
 
-        CSchemaDeclaredClassEntry* pDeclaredClassEntries = new CSchemaDeclaredClassEntry[schemaScope.m_uNumDeclaredClasses + 1U];
+        std::vector<CSchemaDeclaredClassEntry> vecDeclaredClassEntries(schemaScope.m_uNumDeclaredClasses + 1U);
+        CSchemaDeclaredClassEntry* pDeclaredClassEntries = vecDeclaredClassEntries.data();
         if (!g_Memory.ReadMemoryRaw(schemaScope.m_pDeclaredClasses, pDeclaredClassEntries, (schemaScope.m_uNumDeclaredClasses + 1U) * sizeof(CSchemaDeclaredClassEntry)))
             continue;
      
@@ -68,72 +71,138 @@ bool SchemaSystem::Setup()
 
     delete[] ppScopeArray;
 
-    // Dump Econ-related schema entries to a log file for debugging
-    {
-        std::ofstream ofs("schema_dump.txt", std::ios::out | std::ios::trunc);
-        if (ofs.is_open())
-        {
-            ofs << "=== Schema Dump - Total entries: " << m_mapSchemaOffsets.size() << " ===" << std::endl;
-            ofs << std::endl;
-
-            // We need to re-scan to get the actual string names, since we only stored hashes
-            // Re-iterate the schema to dump Econ/Fallback related entries
-            std::uintptr_t uSchemaInterfaceAddress2 = g_Memory.PatternScan(SCHEMASYSTEM_DLL, X("48 89 05 ? ? ? ? 4C 8D 0D ? ? ? ? 33 C0 48 C7 05 ? ? ? ? ? ? ? ? 89 05"), EPatternScanFlags::SCAN_RESOLVE_RIP, 0x3, 0x7);
-            std::uintptr_t uScopePtr2 = 0U;
-            g_Memory.ReadMemoryRaw(uSchemaInterfaceAddress2 + CS_OFFSETOF(CSchemaSystem, m_pScopeArray), &uScopePtr2, sizeof(std::uintptr_t));
-            int nSize2 = g_Memory.ReadMemory<int>(uSchemaInterfaceAddress2 + CS_OFFSETOF(CSchemaSystem, m_nScopeSize));
-            void** ppArr2 = new void*[nSize2];
-            g_Memory.ReadMemoryRaw(uScopePtr2, ppArr2, (nSize2 * sizeof(void*)));
-
-            for (std::uint16_t i = 0U; i <= nSize2; ++i)
-            {
-                CSchemaSystemTypeScope scope{};
-                if (!g_Memory.ReadMemoryRaw(ppArr2[i], &scope, sizeof(CSchemaSystemTypeScope)) || !scope.m_pDeclaredClasses)
-                    continue;
-                if (strcmp(scope.m_szName, X("client.dll")) != 0)
-                    continue;
-
-                CSchemaDeclaredClassEntry* entries = new CSchemaDeclaredClassEntry[scope.m_uNumDeclaredClasses + 1U];
-                if (!g_Memory.ReadMemoryRaw(scope.m_pDeclaredClasses, entries, (scope.m_uNumDeclaredClasses + 1U) * sizeof(CSchemaDeclaredClassEntry)))
-                    continue;
-
-                for (std::uint16_t j = 0U; j < scope.m_uNumDeclaredClasses; ++j)
-                {
-                    CSchemaDeclaredClass decl{};
-                    if (!g_Memory.ReadMemoryRaw(entries[j].m_pDeclaredClass, &decl, sizeof(CSchemaDeclaredClass)))
-                        continue;
-                    CSchemaClass cls{};
-                    if (!g_Memory.ReadMemoryRaw(decl.m_Class, &cls, sizeof(CSchemaClass)))
-                        continue;
-                    char clsName[128]{};
-                    if (!g_Memory.ReadMemoryRaw((void*)(decl.m_szName), clsName, sizeof(clsName)))
-                        continue;
-
-                    std::string sClsName(clsName);
-
-
-                    std::uintptr_t fieldsPtr = reinterpret_cast<uintptr_t>(cls.m_pFields);
-                    if (!fieldsPtr) continue;
-
-                    ofs << "[" << sClsName << "] (" << cls.m_uNumFields << " fields)" << std::endl;
-                    for (std::uint16_t k = 0; k < cls.m_uNumFields; ++k)
-                    {
-                        CSchemaField field = g_Memory.ReadMemory<CSchemaField>(fieldsPtr + (sizeof(CSchemaField) * k));
-                        if (!field.m_pType) continue;
-                        char fName[128]{};
-                        if (!g_Memory.ReadMemoryRaw((void*)(field.m_szName), fName, sizeof(fName)))
-                            continue;
-                        ofs << "  " << sClsName << "->" << fName << " = 0x" << std::hex << field.m_uOffset << std::dec << std::endl;
-                    }
-                    ofs << std::endl;
-                }
-                delete[] entries;
-            }
-            delete[] ppArr2;
-            ofs << "=== End of dump ===" << std::endl;
-            ofs.close();
-        }
-    }
+	ApplyFallbacks();
 
 	return m_mapSchemaOffsets.size() > 0;
+}
+
+void SchemaSystem::ApplyFallbacks()
+{
+	auto SetIfZero = [](FNV1A_t hash, std::uint32_t fallback) {
+		if (m_mapSchemaOffsets.find(hash) == m_mapSchemaOffsets.end() || m_mapSchemaOffsets[hash] == 0)
+			m_mapSchemaOffsets[hash] = fallback;
+	};
+
+	// C_BaseEntity
+	SetIfZero(FNV1A::HashConst("C_BaseEntity->m_pGameSceneNode"), 816);
+	SetIfZero(FNV1A::HashConst("C_BaseEntity->m_iHealth"), 844);
+	SetIfZero(FNV1A::HashConst("C_BaseEntity->m_iMaxHealth"), 840);
+	SetIfZero(FNV1A::HashConst("C_BaseEntity->m_iTeamNum"), 999);
+	SetIfZero(FNV1A::HashConst("C_BaseEntity->m_lifeState"), 852);
+	SetIfZero(FNV1A::HashConst("C_BaseEntity->m_pCollision"), 832);
+	SetIfZero(FNV1A::HashConst("C_BaseEntity->m_fFlags"), 1012);
+	SetIfZero(FNV1A::HashConst("C_BaseEntity->m_hOwnerEntity"), 1312);
+	SetIfZero(FNV1A::HashConst("C_BaseEntity->m_vecVelocity"), 1072);
+	SetIfZero(FNV1A::HashConst("C_BaseEntity->m_vecAbsVelocity"), 1016);
+	SetIfZero(FNV1A::HashConst("C_BaseEntity->m_nSubclassID"), 896);
+
+	// CCSPlayerController
+	SetIfZero(FNV1A::HashConst("CCSPlayerController->m_sSanitizedPlayerName"), 2152);
+
+	// C_PlantedC4
+	SetIfZero(FNV1A::HashConst("C_PlantedC4->m_flC4Blow"), 4560);
+	SetIfZero(FNV1A::HashConst("C_PlantedC4->m_bBombDefused"), 4596);
+
+	// CGameSceneNode
+	SetIfZero(FNV1A::HashConst("CGameSceneNode->m_vecAbsOrigin"), 200);
+	SetIfZero(FNV1A::HashConst("CGameSceneNode->m_bDormant"), 259);
+	SetIfZero(FNV1A::HashConst("CGameSceneNode->m_nodeToWorld"), 16);
+
+	// CCollisionProperty
+	SetIfZero(FNV1A::HashConst("CCollisionProperty->m_vecMins"), 64);
+	SetIfZero(FNV1A::HashConst("CCollisionProperty->m_vecMaxs"), 76);
+
+	// CBasePlayerController
+	SetIfZero(FNV1A::HashConst("CBasePlayerController->m_hPawn"), 1724);
+	SetIfZero(FNV1A::HashConst("CBasePlayerController->m_iszPlayerName"), 1780);
+	SetIfZero(FNV1A::HashConst("CBasePlayerController->m_iDesiredFOV"), 1932);   // FOV changer
+
+	// C_PostProcessingVolume (tungi rejim — aksar xaritalarda yorug'likni shu boshqaradi)
+	SetIfZero(FNV1A::HashConst("C_PostProcessingVolume->m_flMinExposure"), 4284);
+	SetIfZero(FNV1A::HashConst("C_PostProcessingVolume->m_flMaxExposure"), 4288);
+	SetIfZero(FNV1A::HashConst("C_PostProcessingVolume->m_bExposureControl"), 4309);
+	SetIfZero(FNV1A::HashConst("C_PostProcessingVolume->m_bMaster"), 4308);
+	SetIfZero(FNV1A::HashConst("C_PostProcessingVolume->m_flFadeDuration"), 4272);
+	SetIfZero(FNV1A::HashConst("C_PostProcessingVolume->m_flExposureCompensation"), 4292);
+
+	// C_TonemapController2 (tungi rejim — CS2 dagi yangi klass nomi)
+	SetIfZero(FNV1A::HashConst("C_TonemapController2->m_flAutoExposureMin"), 1536);
+	SetIfZero(FNV1A::HashConst("C_TonemapController2->m_flAutoExposureMax"), 1540);
+
+	// C_BaseModelEntity
+	SetIfZero(FNV1A::HashConst("C_BaseModelEntity->m_vecViewOffset"), 3704);
+	SetIfZero(FNV1A::HashConst("C_BaseModelEntity->m_Glow"), 3552);
+
+	// C_EconEntity
+	SetIfZero(FNV1A::HashConst("C_EconEntity->m_AttributeManager"), 4520);
+	SetIfZero(FNV1A::HashConst("C_AttributeContainer->m_Item"), 80);
+	SetIfZero(FNV1A::HashConst("C_EconItemView->m_iItemDefinitionIndex"), 442);
+
+	// CGlowProperty
+	SetIfZero(FNV1A::HashConst("CGlowProperty->m_iGlowType"), 48);
+	SetIfZero(FNV1A::HashConst("CGlowProperty->m_glowColorOverride"), 64);
+	SetIfZero(FNV1A::HashConst("CGlowProperty->m_bGlowing"), 81);
+	SetIfZero(FNV1A::HashConst("CGlowProperty->m_nGlowRange"), 56);
+	SetIfZero(FNV1A::HashConst("CGlowProperty->m_nGlowRangeMin"), 60);
+
+	// C_BasePlayerPawn
+	SetIfZero(FNV1A::HashConst("C_BasePlayerPawn->m_pWeaponServices"), 4616);
+	SetIfZero(FNV1A::HashConst("C_BasePlayerPawn->m_pObserverServices"), 4640);
+	SetIfZero(FNV1A::HashConst("C_BasePlayerPawn->m_pViewModelServices"), 4688);
+	SetIfZero(FNV1A::HashConst("C_BasePlayerPawn->m_pMovementServices"), 4680);
+
+	// CPlayer_WeaponServices
+	SetIfZero(FNV1A::HashConst("CPlayer_WeaponServices->m_hActiveWeapon"), 96);
+	SetIfZero(FNV1A::HashConst("CPlayer_WeaponServices->m_hMyWeapons"), 72);
+
+	// CBasePlayerController - CRITICAL for ESP
+	SetIfZero(FNV1A::HashConst("CBasePlayerController->m_bIsLocalPlayerController"), 1928);
+
+	// CCSPlayerController
+	SetIfZero(FNV1A::HashConst("CCSPlayerController->m_hPlayerPawn"), 2324);
+	SetIfZero(FNV1A::HashConst("CCSPlayerController->m_hObserverPawn"), 2328);
+	SetIfZero(FNV1A::HashConst("CCSPlayerController->m_sSanitizedPlayerName"), 2152);
+	SetIfZero(FNV1A::HashConst("CCSPlayerController->m_iCompTeammateColor"), 2128);
+	SetIfZero(FNV1A::HashConst("CCSPlayerController->m_bPawnIsAlive"), 2332);
+
+	// CPlayer_ObserverServices - NOT in client.dll schema, MUST have fallback!
+	SetIfZero(FNV1A::HashConst("CPlayer_ObserverServices->m_hObserverTarget"), 76);
+	SetIfZero(FNV1A::HashConst("CPlayer_ObserverServices->m_iObserverMode"), 72);
+
+	// C_CSPlayerPawnBase / C_CSPlayerPawn
+	SetIfZero(FNV1A::HashConst("C_CSPlayerPawnBase->m_flFlashMaxAlpha"), 5156);
+	SetIfZero(FNV1A::HashConst("C_CSPlayerPawnBase->m_flFlashDuration"), 5160);
+	SetIfZero(FNV1A::HashConst("C_CSPlayerPawnBase->m_entitySpottedState"), 4504);
+	SetIfZero(FNV1A::HashConst("C_CSPlayerPawn->m_entitySpottedState"), 7264);
+	SetIfZero(FNV1A::HashConst("C_CSPlayerPawn->m_bIsScoped"), 7288);
+	SetIfZero(FNV1A::HashConst("C_CSPlayerPawn->m_bIsWalking"), 7256);
+	SetIfZero(FNV1A::HashConst("C_CSPlayerPawn->m_bIsDefusing"), 7290);
+	SetIfZero(FNV1A::HashConst("C_CSPlayerPawn->m_ArmorValue"), 7332);
+	SetIfZero(FNV1A::HashConst("C_CSPlayerPawn->m_iShotsFired"), 7308);
+
+	// EntitySpottedState_t
+	SetIfZero(FNV1A::HashConst("EntitySpottedState_t->m_bSpotted"), 8);
+	SetIfZero(FNV1A::HashConst("EntitySpottedState_t->m_bSpottedByMask"), 12);
+
+	// ===================== SKIN CHANGER OFFSETS =====================
+	// C_EconEntity (Fallback fields — on the weapon entity itself)
+	SetIfZero(FNV1A::HashConst("C_EconEntity->m_AttributeManager"), 4520);
+	SetIfZero(FNV1A::HashConst("C_EconEntity->m_nFallbackPaintKit"), 5760);
+	SetIfZero(FNV1A::HashConst("C_EconEntity->m_nFallbackSeed"), 5764);
+	SetIfZero(FNV1A::HashConst("C_EconEntity->m_flFallbackWear"), 5768);
+	SetIfZero(FNV1A::HashConst("C_EconEntity->m_nFallbackStatTrak"), 5772);
+	SetIfZero(FNV1A::HashConst("C_EconEntity->m_OriginalOwnerXuidLow"), 5752);
+	SetIfZero(FNV1A::HashConst("C_EconEntity->m_OriginalOwnerXuidHigh"), 5756);
+
+	// C_AttributeContainer
+	SetIfZero(FNV1A::HashConst("C_AttributeContainer->m_Item"), 80);
+
+	// C_EconItemView (inside AttributeManager->Item)
+	SetIfZero(FNV1A::HashConst("C_EconItemView->m_iItemDefinitionIndex"), 442);
+	SetIfZero(FNV1A::HashConst("C_EconItemView->m_iItemIDHigh"), 464);
+	SetIfZero(FNV1A::HashConst("C_EconItemView->m_iItemIDLow"), 468);
+	SetIfZero(FNV1A::HashConst("C_EconItemView->m_iAccountID"), 472);
+	SetIfZero(FNV1A::HashConst("C_EconItemView->m_iEntityQuality"), 444);
+
+	std::cout << "  [+] Schema offsets: " << m_mapSchemaOffsets.size() << " entries (with fallbacks)" << std::endl;
 }

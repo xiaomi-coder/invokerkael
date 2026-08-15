@@ -1,0 +1,1176 @@
+=== Schema Dump - Total entries: 47 ===
+
+[CScriptComponent] (550 fields)
+
+[C_BaseEntity] (550 fields)
+
+[CountdownTimer] (550 fields)
+  CountdownTimer-> = 0x0
+
+[CPulseExecCursor] (550 fields)
+
+[CPulse_BlackboardReference] (550 fields)
+  CPulse_BlackboardReference-> = 0x0
+
+[CPulse_InvokeBinding] (550 fields)
+  CPulse_InvokeBinding-> = 0x0
+
+[CPulse_CallInfo] (550 fields)
+  CPulse_CallInfo-> = 0x0
+
+[CPulseCell_Base] (550 fields)
+  CPulseCell_Base-> = 0x0
+
+[CPulseGraphDef] (550 fields)
+  CPulseGraphDef-> = 0x0
+
+[CBasePulseGraphInstance] (550 fields)
+
+[CPulseArraylib] (550 fields)
+
+[CPulseEnumlib] (550 fields)
+
+[CPulseMathlib] (550 fields)
+
+[CPulseStringlib] (550 fields)
+
+[CPulseTestScriptLib] (550 fields)
+
+[CPulse_OutflowConnection] (550 fields)
+
+[CPulse_ResumePoint] (550 fields)
+
+[SignatureOutflow_Continue] (550 fields)
+
+[SignatureOutflow_Resume] (550 fields)
+
+[PulseNodeDynamicOutflows_t::DynamicOutflow_t] (550 fields)
+  PulseNodeDynamicOutflows_t::DynamicOutflow_t-> = 0x0
+
+[PulseNodeDynamicOutflows_t] (550 fields)
+  PulseNodeDynamicOutflows_t-> = 0x0
+
+[CPulseCell_BaseFlow] (550 fields)
+
+[CPulseCell_BaseRequirement] (550 fields)
+
+[CPulseCell_Inflow_BaseEntrypoint] (550 fields)
+
+[CPulseCell_Inflow_Method] (550 fields)
+
+[CPulseCell_Inflow_EventHandler] (550 fields)
+
+[CPulseCell_Inflow_GraphHook] (550 fields)
+
+[CPulseCell_Inflow_EntOutputHandler] (550 fields)
+
+[CPulseCell_Inflow_ObservableVariableListener] (550 fields)
+
+[CPulseCell_BaseYieldingInflow] (550 fields)
+
+[CPulseCell_BaseLerp] (550 fields)
+
+[CPulseCell_BaseLerp::CursorState_t] (550 fields)
+
+[CPulseCell_BaseValue] (550 fields)
+
+[CPulseCell_Step_PublicOutput] (550 fields)
+
+[CPulseCell_Inflow_Yield] (550 fields)
+
+[CPulseCell_Inflow_Wait] (550 fields)
+
+[CPulseCell_Outflow_CycleOrdered] (550 fields)
+
+[CPulseCell_Outflow_CycleOrdered::InstanceState_t] (550 fields)
+
+[CPulseCell_Outflow_CycleRandom] (550 fields)
+
+[CPulseCell_Outflow_CycleShuffled] (550 fields)
+
+[CPulseCell_Outflow_CycleShuffled::InstanceState_t] (550 fields)
+  CPulseCell_Outflow_CycleShuffled::InstanceState_t-> = 0x0
+
+[CPulseCell_Value_RandomInt] (550 fields)
+
+[CPulseCell_Value_RandomFloat] (550 fields)
+
+[CPulseCell_Step_DebugLog] (550 fields)
+
+[CPulseCell_Step_CallExternalMethod] (550 fields)
+
+[CPulseCell_Unknown] (550 fields)
+
+[CPulseCell_Value_Curve] (550 fields)
+
+[CPulseCell_FireCursors] (550 fields)
+
+[CPulseCell_Value_Gradient] (550 fields)
+
+[CPulseCell_IntervalTimer] (550 fields)
+
+[CPulseCell_IntervalTimer::CursorState_t] (550 fields)
+
+[OutflowWithRequirements_t] (550 fields)
+  OutflowWithRequirements_t-> = 0x0
+
+[PulseSelectorOutflowList_t] (550 fields)
+  PulseSelectorOutflowList_t-> = 0x0
+
+[CPulseCell_LimitCount] (550 fields)
+
+[CPulseCell_LimitCount::Criteria_t] (550 fields)
+
+[CPulseCell_LimitCount::InstanceState_t] (550 fields)
+
+[CPulseCell_IsRequirementValid] (550 fields)
+
+[CPulseCell_IsRequirementValid::Criteria_t] (550 fields)
+
+[CPulseCell_InlineNodeSkipSelector] (550 fields)
+
+[CPulseCell_PickBestOutflowSelector] (550 fields)
+
+[CPulseCell_Timeline::TimelineEvent_t] (550 fields)
+  CPulseCell_Timeline::TimelineEvent_t-> = 0x0
+
+[CPulseCell_Timeline] (550 fields)
+
+[CPulseCell_WaitForObservable] (550 fields)
+
+[CPulseCell_BaseState] (550 fields)
+
+[CPulseCell_BooleanSwitchState] (550 fields)
+
+[CPulseCursorFuncs] (550 fields)
+
+[CPulseCell_WaitForCursorsWithTagBase] (550 fields)
+
+[CPulseCell_WaitForCursorsWithTag] (550 fields)
+
+[CPulseCell_CursorQueue] (550 fields)
+
+[CEntityComponent] (550 fields)
+
+[CEntityIdentity] (550 fields)
+
+[CEntityInstance] (550 fields)
+
+[CompositeMaterialMatchFilter_t] (550 fields)
+  CompositeMaterialMatchFilter_t-> = 0x0
+
+[CompositeMaterialInputLooseVariable_t] (550 fields)
+  CompositeMaterialInputLooseVariable_t-> = 0x0
+
+[CompMatMutatorCondition_t] (550 fields)
+  CompMatMutatorCondition_t-> = 0x0
+
+[CompMatPropertyMutator_t] (550 fields)
+  CompMatPropertyMutator_t-> = 0x0
+
+[CompositeMaterialInputContainer_t] (550 fields)
+  CompositeMaterialInputContainer_t-> = 0x0
+
+[CompositeMaterialAssemblyProcedure_t] (550 fields)
+  CompositeMaterialAssemblyProcedure_t-> = 0x0
+
+[GeneratedTextureHandle_t] (550 fields)
+
+[CompositeMaterial_t] (550 fields)
+
+[CompositeMaterialEditorPoint_t] (550 fields)
+  CompositeMaterialEditorPoint_t-> = 0x0
+
+[CCompositeMaterialEditorDoc] (550 fields)
+  CCompositeMaterialEditorDoc-> = 0x0
+
+[CGameSceneNode] (550 fields)
+
+[CBodyComponent] (550 fields)
+
+[CBodyComponentPoint] (550 fields)
+
+[CSkeletonInstance] (550 fields)
+
+[CBodyComponentSkeletonInstance] (550 fields)
+
+[C_BaseModelEntity] (550 fields)
+
+[CChoreoComponent] (550 fields)
+  CChoreoComponent-> = 0x0
+
+[CHitboxComponent] (550 fields)
+
+[CLightComponent] (550 fields)
+
+[CRenderComponent] (550 fields)
+
+[CBaseEntity_SharedAPI] (550 fields)
+
+[CEnvCombinedLightProbeVolumeAPI] (550 fields)
+
+[CEnvCubemapAPI] (550 fields)
+
+[CEnvLightProbeVolumeAPI] (550 fields)
+
+[CEnvSkyAPI] (550 fields)
+
+[CLightEntityAPI] (550 fields)
+
+[CPulseCell_LerpCameraSettings] (550 fields)
+
+[C_PointCamera] (550 fields)
+
+[CPulseCell_LerpCameraSettings::CursorState_t] (550 fields)
+
+[CPointTemplateAPI] (550 fields)
+
+[CPropDataComponent] (550 fields)
+
+[CBuoyancyHelper] (550 fields)
+  CBuoyancyHelper-> = 0x0
+
+[CBaseTriggerAPI] (550 fields)
+
+[CPulseCell_Step_EntFire] (550 fields)
+
+[CPulseCell_PlaySequence] (550 fields)
+
+[CBaseAnimGraph] (550 fields)
+
+[CPulseCell_PlaySequence::CursorState_t] (550 fields)
+
+[CBaseAnimGraphAPI] (550 fields)
+
+[CBaseModelEntityAPI] (550 fields)
+
+[DestructiblePartDamageRequestAPI] (550 fields)
+
+[CBasePlayerControllerAPI] (550 fields)
+
+[C_CommandContext] (550 fields)
+  C_CommandContext-> = 0x0
+
+[ViewAngleServerChange_t] (550 fields)
+
+[CFilterMultipleAPI] (550 fields)
+
+[CParticleSystemAPI] (550 fields)
+
+[CPlayer_AutoaimServices] (550 fields)
+
+[audioparams_t] (550 fields)
+  audioparams_t-> = 0x0
+
+[C_fogplayerparams_t] (550 fields)
+  C_fogplayerparams_t-> = 0x0
+
+[C_ColorCorrection] (550 fields)
+
+[C_TonemapController2] (550 fields)
+
+[C_PostProcessingVolume] (550 fields)
+
+[fogparams_t] (550 fields)
+  fogparams_t-> = 0x0
+
+[C_FogController] (550 fields)
+
+[CPlayer_CameraServices] (550 fields)
+
+[CPlayer_FlashlightServices] (550 fields)
+
+[CPlayer_ItemServices] (550 fields)
+
+[CPlayer_MovementServices] (550 fields)
+
+[CPlayer_MovementServices_Humanoid] (550 fields)
+
+[CPlayer_ObserverServices] (550 fields)
+
+[CPlayer_UseServices] (550 fields)
+
+[CPlayer_WaterServices] (550 fields)
+
+[C_BasePlayerWeapon] (550 fields)
+
+[CPlayer_WeaponServices] (550 fields)
+
+[AnimGraph2SerializedPoseRecipeSlot_t] (550 fields)
+
+[CBaseAnimGraphController] (550 fields)
+
+[CBodyComponentBaseAnimGraph] (550 fields)
+
+[EntityRenderAttribute_t] (550 fields)
+  EntityRenderAttribute_t-> = 0x0
+
+[ActiveModelConfig_t] (550 fields)
+  ActiveModelConfig_t-> = 0x0
+
+[CBodyComponentBaseModelEntity] (550 fields)
+
+[C_BaseModelEntity::Emphasized_Phoneme] (550 fields)
+  C_BaseModelEntity::Emphasized_Phoneme-> = 0x0
+
+[CDestructiblePartsComponent] (550 fields)
+  CDestructiblePartsComponent-> = 0x0
+
+[CExplosionTypeData] (550 fields)
+  CExplosionTypeData-> = 0x0
+
+[CGameSceneNodeHandle] (550 fields)
+  CGameSceneNodeHandle-> = 0x0
+
+[CLogicRelayAPI] (550 fields)
+
+[CPathQueryComponent] (550 fields)
+
+[CPathSimpleAPI] (550 fields)
+
+[SequenceHistory_t] (550 fields)
+
+[CNetworkedSequenceOperation] (550 fields)
+  CNetworkedSequenceOperation-> = 0x0
+
+[CModelState] (550 fields)
+
+[IntervalTimer] (550 fields)
+  IntervalTimer-> = 0x0
+
+[EngineCountdownTimer] (550 fields)
+  EngineCountdownTimer-> = 0x0
+
+[CTimeline] (550 fields)
+
+[C_BaseEntityAPI] (550 fields)
+
+[CEnvWindSharedAPI] (550 fields)
+
+[CPointValueRemapperAPI] (550 fields)
+
+[CTakeDamageResultAPI] (550 fields)
+
+[screenfade_t] (550 fields)
+  screenfade_t-> = 0x0
+
+[screenshake_t] (550 fields)
+
+[CCollisionProperty] (550 fields)
+  CCollisionProperty-> = 0x0
+
+[CLogicalEntity] (550 fields)
+
+[C_EntityFlame] (550 fields)
+
+[C_RopeKeyframe] (550 fields)
+
+[C_RopeKeyframe::CPhysicsDelegate] (550 fields)
+
+[C_SceneEntity::QueuedEvents_t] (550 fields)
+
+[C_TintController] (550 fields)
+
+[CFlashlightEffect] (550 fields)
+
+[CInterpolatedValue] (550 fields)
+
+[IClientAlphaProperty] (550 fields)
+
+[C_SkyCamera] (550 fields)
+
+[CSkyboxReference] (550 fields)
+
+[sky3dparams_t] (550 fields)
+  sky3dparams_t-> = 0x0
+
+[TimedEvent] (550 fields)
+
+[VPhysicsCollisionAttribute_t] (550 fields)
+  VPhysicsCollisionAttribute_t-> = 0x0
+
+[CEffectData] (550 fields)
+
+[C_EnvDetailController] (550 fields)
+
+[C_EnvWindShared] (550 fields)
+  C_EnvWindShared-> = 0x0
+
+[C_InfoLadderDismount] (550 fields)
+
+[shard_model_desc_t] (550 fields)
+
+[C_GameRulesProxy] (550 fields)
+
+[C_GameRules] (550 fields)
+
+[CGlowProperty] (550 fields)
+  CGlowProperty-> = 0x0
+
+[C_MultiplayRules] (550 fields)
+
+[PhysicsRagdollPose_t] (550 fields)
+  PhysicsRagdollPose_t-> = 0x0
+
+[C_SingleplayRules] (550 fields)
+
+[C_SoundOpvarSetPointBase] (550 fields)
+
+[C_SoundOpvarSetPointEntity] (550 fields)
+
+[CSoundOpvarSetBoxEntity] (550 fields)
+
+[C_SoundOpvarSetAABBEntity] (550 fields)
+
+[C_SoundOpvarSetOBBEntity] (550 fields)
+
+[C_SoundOpvarSetPathCornerEntity] (550 fields)
+
+[C_SoundOpvarSetAutoRoomEntity] (550 fields)
+
+[C_SoundOpvarSetOBBWindEntity] (550 fields)
+
+[C_TeamplayRules] (550 fields)
+
+[C_PortraitWorldCallbackHandler] (550 fields)
+
+[CEconItemAttribute] (550 fields)
+
+[CAttributeManager] (550 fields)
+
+[CAttributeList] (550 fields)
+
+[CAttributeManager::cached_attribute_float_t] (550 fields)
+
+[C_EconItemView] (550 fields)
+
+[C_AttributeContainer] (550 fields)
+
+[C_EconEntity::AttachedModelData_t] (550 fields)
+
+[CBaseGrenade_API] (550 fields)
+
+[EntitySpottedState_t] (550 fields)
+
+[C_CSGameRules] (550 fields)
+
+[C_CSGameRulesProxy] (550 fields)
+
+[CCSGameModeRules] (550 fields)
+  CCSGameModeRules-> = 0x0
+
+[C_RetakeGameRules] (550 fields)
+
+[CCSGameModeRules_Noop] (550 fields)
+
+[CCSGameModeRules_ArmsRace] (550 fields)
+
+[CCSGameModeRules_Deathmatch] (550 fields)
+
+[C_CSPlayerPawn] (550 fields)
+
+[CSPerRoundStats_t] (550 fields)
+
+[CSMatchStats_t] (550 fields)
+
+[CCSGO_TeamPreviewCharacterPosition_API] (550 fields)
+
+[C_CSGO_TeamPreviewCharacterPosition] (550 fields)
+
+[C_CSGO_TeamSelectCharacterPosition] (550 fields)
+
+[C_CSGO_TeamSelectTerroristPosition] (550 fields)
+
+[C_CSGO_TeamSelectCounterTerroristPosition] (550 fields)
+
+[C_CSGO_TeamIntroCharacterPosition] (550 fields)
+
+[C_CSGO_TeamIntroTerroristPosition] (550 fields)
+
+[C_CSGO_TeamIntroCounterTerroristPosition] (550 fields)
+
+[CCSGO_WingmanIntroCharacterPosition] (550 fields)
+
+[CCSGO_WingmanIntroTerroristPosition] (550 fields)
+
+[CCSGO_WingmanIntroCounterTerroristPosition] (550 fields)
+
+[C_CSGO_EndOfMatchLineupEndpoint] (550 fields)
+
+[C_CSGO_EndOfMatchLineupStart] (550 fields)
+
+[CCSGO_EndOfMatchLineupEnd] (550 fields)
+
+[C_CSMinimapBoundary] (550 fields)
+
+[C_CSPetPlacement] (550 fields)
+
+[C_PlayerPing] (550 fields)
+
+[CCSPlayer_PingServices] (550 fields)
+
+[C_CSPlayerResource] (550 fields)
+
+[CCSPlayerController_API] (550 fields)
+
+[CCSPlayer_DamageReactServices] (550 fields)
+
+[CCSPlayerBase_CameraServices] (550 fields)
+
+[WeaponPurchaseCount_t] (550 fields)
+
+[WeaponPurchaseTracker_t] (550 fields)
+
+[CCSPlayer_ActionTrackingServices] (550 fields)
+
+[CCSPlayer_AimPunchServices] (550 fields)
+
+[CCSPlayer_BulletServices] (550 fields)
+
+[SellbackPurchaseEntry_t] (550 fields)
+
+[CCSPlayer_BuyServices] (550 fields)
+
+[CCSPlayer_CameraServices] (550 fields)
+
+[CCSPlayer_HostageServices] (550 fields)
+
+[CCSPlayer_ItemServices] (550 fields)
+
+[CCSPlayerLegacyJump] (550 fields)
+
+[CFootstepControl_API] (550 fields)
+
+[CCSPlayerModernJump] (550 fields)
+
+[CCSPlayer_MovementServices] (550 fields)
+
+[CCSPlayer_UseServices] (550 fields)
+
+[CCSPlayer_WaterServices] (550 fields)
+
+[CCSPlayer_WeaponServices] (550 fields)
+
+[CCS2WeaponGraphController] (550 fields)
+
+[CCS2PawnGraphController] (550 fields)
+
+[CCSObserver_ObserverServices] (550 fields)
+
+[CCSObserver_CameraServices] (550 fields)
+
+[CCSObserver_MovementServices] (550 fields)
+
+[CCSObserver_UseServices] (550 fields)
+
+[CCSPlayerController_ActionTrackingServices] (550 fields)
+
+[CCSPlayerController] (550 fields)
+
+[CDamageRecord] (550 fields)
+
+[CCSPlayerController_DamageServices] (550 fields)
+
+[CCSPlayerController_InGameMoneyServices] (550 fields)
+
+[ServerAuthoritativeWeaponSlot_t] (550 fields)
+
+[CCSPlayerController_InventoryServices::NetworkedLoadoutSlot_t] (550 fields)
+
+[CCSPlayerController_InventoryServices] (550 fields)
+
+[CCSWeaponBase_API] (550 fields)
+
+[C_IronSightController] (550 fields)
+
+[C_EnvWindClientside] (550 fields)
+
+[CGlobalLightBase] (550 fields)
+
+[C_GlobalLight] (550 fields)
+
+[C_CSGO_PreviewModel_API] (550 fields)
+
+[C_CSGO_PreviewPlayer_API] (550 fields)
+
+[C_CSGO_MapPreviewCameraPathNode_API] (550 fields)
+
+[C_CSGO_MapPreviewCameraPath_API] (550 fields)
+
+[C_CSGO_MapPreviewCameraPathNode] (550 fields)
+
+[C_CSGO_MapPreviewCameraPath] (550 fields)
+
+[CCSPlayer_GlowServices] (550 fields)
+
+[C_CSPlayerPawnBase_API] (550 fields)
+
+[C_CSObserverPawn_API] (550 fields)
+
+[C_CSPlayerPawn_API] (550 fields)
+
+[C_VoteController] (550 fields)
+
+[C_MapVetoPickController] (550 fields)
+
+[CPlayerSprayDecalRenderHelper] (550 fields)
+
+[C_CSGO_TeamPreviewCamera_API] (550 fields)
+
+[C_CSGO_TeamPreviewCamera] (550 fields)
+
+[C_CSGO_TeamSelectCamera] (550 fields)
+
+[C_CSGO_TerroristTeamIntroCamera] (550 fields)
+
+[C_CSGO_TerroristWingmanIntroCamera] (550 fields)
+
+[C_CSGO_CounterTerroristTeamIntroCamera] (550 fields)
+
+[C_CSGO_CounterTerroristWingmanIntroCamera] (550 fields)
+
+[C_CSGO_EndOfMatchCamera] (550 fields)
+
+[C_CSGO_EndOfMatchCharacterPosition] (550 fields)
+
+[C_CsmFovOverride_API] (550 fields)
+
+[C_CsmFovOverride] (550 fields)
+
+[CCS2UIPawnGraphController] (550 fields)
+
+[CGrenadeTracer_API] (550 fields)
+
+[CFlashbangProjectile_API] (550 fields)
+
+[CBarnLightAPI] (550 fields)
+
+[CMapInfo_API] (550 fields)
+
+[inv_image_map_t] (550 fields)
+  inv_image_map_t-> = 0x0
+
+[inv_image_item_t] (550 fields)
+  inv_image_item_t-> = 0x0
+
+[inv_image_camera_t] (550 fields)
+
+[inv_image_light_sun_t] (550 fields)
+
+[inv_image_clearcolor_t] (550 fields)
+
+[inv_image_light_fill_t] (550 fields)
+
+[inv_image_light_barn_t] (550 fields)
+
+[inv_image_data_t] (550 fields)
+  inv_image_data_t-> = 0x0
+
+[CInventoryImageData] (550 fields)
+  CInventoryImageData-> = 0x0
+
+[CCS_PortraitWorldCallbackHandler] (550 fields)
+
+[C_PointEntity] (550 fields)
+
+[C_EnvCombinedLightProbeVolume] (550 fields)
+
+[C_EnvCombinedLightProbeVolumeAlias_func_combined_light_probe_volume] (550 fields)
+
+[C_EnvCubemap] (550 fields)
+
+[C_EnvCubemapBox] (550 fields)
+
+[C_EnvCubemapFog] (550 fields)
+
+[C_GradientFog] (550 fields)
+
+[C_EnvLightProbeVolume] (550 fields)
+
+[C_PlayerVisibility] (550 fields)
+
+[C_EnvVolumetricFogController] (550 fields)
+
+[C_EnvVolumetricFogVolume] (550 fields)
+
+[C_EnvWindController] (550 fields)
+
+[C_EnvWindVolume] (550 fields)
+
+[CInfoTarget] (550 fields)
+
+[CInfoParticleTarget] (550 fields)
+
+[CChoreoInfoTarget] (550 fields)
+
+[C_InfoVisibilityBox] (550 fields)
+
+[CInfoWorldLayer] (550 fields)
+
+[CPointChildModifier] (550 fields)
+
+[C_PointCameraVFOV] (550 fields)
+
+[CPointOrient] (550 fields)
+
+[CPointTemplate] (550 fields)
+
+[CRagdollManager] (550 fields)
+
+[C_SoundAreaEntityBase] (550 fields)
+
+[C_SoundAreaEntitySphere] (550 fields)
+
+[C_SoundAreaEntityOrientedBox] (550 fields)
+
+[C_SoundEventEntity] (550 fields)
+
+[C_SoundEventEntityAlias_snd_event_point] (550 fields)
+
+[C_SoundEventAABBEntity] (550 fields)
+
+[C_SoundEventOBBEntity] (550 fields)
+
+[C_SoundEventSphereEntity] (550 fields)
+
+[C_SoundEventConeEntity] (550 fields)
+
+[C_SoundEventPathCornerEntity] (550 fields)
+
+[CBasePlayerController] (550 fields)
+
+[C_BasePlayerPawn] (550 fields)
+
+[C_Team] (550 fields)
+
+[CInfoFan] (550 fields)
+
+[CPulseGameBlackboard] (550 fields)
+
+[CBasePlayerVData] (550 fields)
+
+[CBaseFilter] (550 fields)
+
+[CFilterMultiple] (550 fields)
+
+[CFilterProximity] (550 fields)
+
+[CFilterLOS] (550 fields)
+
+[CFilterClass] (550 fields)
+
+[CBasePlayerWeaponVData] (550 fields)
+
+[CClientAlphaProperty] (550 fields)
+
+[CServerOnlyModelEntity] (550 fields)
+
+[C_ModelPointEntity] (550 fields)
+
+[CLogicRelay] (550 fields)
+
+[C_PathParticleRope] (550 fields)
+
+[C_PathParticleRopeAlias_path_particle_rope_clientside] (550 fields)
+
+[CPathSimple] (550 fields)
+
+[CPathWithDynamicNodes] (550 fields)
+
+[CPathNode] (550 fields)
+
+[CEnvSoundscape] (550 fields)
+
+[CEnvSoundscapeProxy] (550 fields)
+
+[CEnvSoundscapeTriggerable] (550 fields)
+
+[C_DynamicLight] (550 fields)
+
+[C_FuncTrackTrain] (550 fields)
+
+[C_SpotlightEnd] (550 fields)
+
+[C_PointValueRemapper] (550 fields)
+
+[C_PointWorldText] (550 fields)
+
+[CCitadelSoundOpvarSetOBB] (550 fields)
+
+[C_HandleTest] (550 fields)
+
+[C_EnvWind] (550 fields)
+
+[C_BaseToggle] (550 fields)
+
+[C_BaseButton] (550 fields)
+
+[C_PrecipitationBlocker] (550 fields)
+
+[C_EntityDissolve] (550 fields)
+
+[C_EnvDecal] (550 fields)
+
+[C_FuncBrush] (550 fields)
+
+[C_FuncElectrifiedVolume] (550 fields)
+
+[C_FuncRotating] (550 fields)
+
+[C_Breakable] (550 fields)
+
+[C_PhysBox] (550 fields)
+
+[C_SceneEntity] (550 fields)
+
+[C_TriggerVolume] (550 fields)
+
+[C_Beam] (550 fields)
+
+[C_FuncLadder] (550 fields)
+
+[C_ShatterGlassShardPhysics] (550 fields)
+
+[CPrecipitationVData] (550 fields)
+
+[C_Sprite] (550 fields)
+
+[CSpriteOriented] (550 fields)
+
+[C_BaseClientUIEntity] (550 fields)
+
+[C_PointClientUIDialog] (550 fields)
+
+[C_PointClientUIHUD] (550 fields)
+
+[CPointOffScreenIndicatorUi] (550 fields)
+
+[C_PointClientUIWorldPanel] (550 fields)
+
+[C_PointClientUIWorldTextPanel] (550 fields)
+
+[CInfoOffscreenPanoramaTexture] (550 fields)
+
+[CFuncWater] (550 fields)
+
+[CWaterSplasher] (550 fields)
+
+[C_InfoInstructorHintHostageRescueZone] (550 fields)
+
+[CCashStack] (550 fields)
+
+[C_CSObserverPawn] (550 fields)
+
+[CCSWeaponBaseVData] (550 fields)
+
+[C_PlayerSprayDecal] (550 fields)
+
+[C_FuncConveyor] (550 fields)
+
+[CGrenadeTracer] (550 fields)
+
+[C_Inferno] (550 fields)
+
+[C_FireCrackerBlast] (550 fields)
+
+[C_BarnLight] (550 fields)
+
+[C_RectLight] (550 fields)
+
+[C_OmniLight] (550 fields)
+
+[CMapInfo] (550 fields)
+
+[C_CSTeam] (550 fields)
+
+[CInfoDynamicShadowHint] (550 fields)
+
+[CInfoDynamicShadowHintBox] (550 fields)
+
+[C_EnvSky] (550 fields)
+
+[C_TonemapController2Alias_env_tonemap_controller2] (550 fields)
+
+[C_LightEntity] (550 fields)
+
+[C_LightSpotEntity] (550 fields)
+
+[C_LightOrthoEntity] (550 fields)
+
+[C_LightDirectionalEntity] (550 fields)
+
+[C_LightEnvironmentEntity] (550 fields)
+
+[C_BaseTrigger] (550 fields)
+
+[CTriggerFan] (550 fields)
+
+[CEnvSoundscapeProxyAlias_snd_soundscape_proxy] (550 fields)
+
+[CEnvSoundscapeAlias_snd_soundscape] (550 fields)
+
+[CEnvSoundscapeTriggerableAlias_snd_soundscape_triggerable] (550 fields)
+
+[CFilterName] (550 fields)
+
+[CFilterModel] (550 fields)
+
+[CFilterTeam] (550 fields)
+
+[CFilterMassGreater] (550 fields)
+
+[FilterDamageType] (550 fields)
+
+[FilterHealth] (550 fields)
+
+[CFilterAttributeInt] (550 fields)
+
+[C_ParticleSystem] (550 fields)
+
+[C_TextureBasedAnimatable] (550 fields)
+
+[C_World] (550 fields)
+
+[CBaseProp] (550 fields)
+
+[C_BreakableProp] (550 fields)
+
+[C_DynamicProp] (550 fields)
+
+[C_DynamicPropAlias_dynamic_prop] (550 fields)
+
+[C_DynamicPropAlias_prop_dynamic_override] (550 fields)
+
+[C_DynamicPropAlias_cable_dynamic] (550 fields)
+
+[C_ColorCorrectionVolume] (550 fields)
+
+[C_FuncMonitor] (550 fields)
+
+[C_FuncMoveLinear] (550 fields)
+
+[C_FuncMover] (550 fields)
+
+[C_PhysMagnet] (550 fields)
+
+[C_PointCommentaryNode] (550 fields)
+
+[C_WaterBullet] (550 fields)
+
+[C_EconWearable] (550 fields)
+
+[C_BaseCombatCharacter] (550 fields)
+
+[C_BaseDoor] (550 fields)
+
+[C_ClientRagdoll] (550 fields)
+
+[C_Precipitation] (550 fields)
+
+[C_Fish] (550 fields)
+
+[C_PhysicsProp] (550 fields)
+
+[C_BasePropDoor] (550 fields)
+
+[C_PropDoorRotating] (550 fields)
+
+[C_TriggerMultiple] (550 fields)
+
+[C_TriggerLerpObject] (550 fields)
+
+[C_TriggerPhysics] (550 fields)
+
+[C_PhysPropClientside] (550 fields)
+
+[C_RagdollProp] (550 fields)
+
+[C_LocalTempEntity] (550 fields)
+
+[C_EconEntity] (550 fields)
+
+[C_BaseGrenade] (550 fields)
+
+[CFuncRetakeBarrier] (550 fields)
+
+[CBombTarget] (550 fields)
+
+[CHostageRescueZoneShim] (550 fields)
+
+[CHostageRescueZone] (550 fields)
+
+[C_TriggerBuoyancy] (550 fields)
+
+[C_PhysicsPropMultiplayer] (550 fields)
+
+[C_FootstepControl] (550 fields)
+
+[C_CS2WeaponModuleBase] (550 fields)
+
+[C_StattrakModule] (550 fields)
+
+[C_NametagModule] (550 fields)
+
+[C_KeychainModule] (550 fields)
+
+[C_BaseCSGrenadeProjectile] (550 fields)
+
+[C_CSGO_PreviewModel] (550 fields)
+
+[C_CSGO_PreviewModelAlias_csgo_item_previewmodel] (550 fields)
+
+[C_CSPlayerPawnBase] (550 fields)
+
+[C_WorldModelGloves] (550 fields)
+
+[C_BulletHitModel] (550 fields)
+
+[C_CS2HudModelArms] (550 fields)
+
+[C_HostageCarriableProp] (550 fields)
+
+[C_Hostage] (550 fields)
+
+[C_PlantedC4] (550 fields)
+
+[C_Multimeter] (550 fields)
+
+[C_Item] (550 fields)
+
+[C_LateUpdatedAnimating] (550 fields)
+
+[C_HEGrenadeProjectile] (550 fields)
+
+[C_FlashbangProjectile] (550 fields)
+
+[C_Chicken] (550 fields)
+
+[C_MapPreviewParticleSystem] (550 fields)
+
+[CBaseAnimGraphAlias_baseanimating] (550 fields)
+
+[C_EnvParticleGlow] (550 fields)
+
+[C_NetTestBaseCombatCharacter] (550 fields)
+
+[C_RagdollPropAttached] (550 fields)
+
+[C_CSWeaponBase] (550 fields)
+
+[C_CSWeaponBaseGun] (550 fields)
+
+[C_CSWeaponBaseShotgun] (550 fields)
+
+[C_C4] (550 fields)
+
+[C_WeaponCZ75a] (550 fields)
+
+[C_DEagle] (550 fields)
+
+[C_WeaponElite] (550 fields)
+
+[C_WeaponTaser] (550 fields)
+
+[C_Knife] (550 fields)
+
+[C_MolotovProjectile] (550 fields)
+
+[C_DecoyProjectile] (550 fields)
+
+[C_SmokeGrenadeProjectile] (550 fields)
+
+[C_BaseCSGrenade] (550 fields)
+
+[C_WeaponBaseItem] (550 fields)
+
+[C_ItemDogtags] (550 fields)
+
+[C_Item_Healthshot] (550 fields)
+
+[C_CSGO_PreviewPlayer] (550 fields)
+
+[C_CSGO_PreviewPlayerAlias_csgo_player_previewmodel] (550 fields)
+
+[C_CSGO_TeamPreviewModel] (550 fields)
+
+[C_CS2HudModelAddon] (550 fields)
+
+[C_CS2HudModelBase] (550 fields)
+
+[C_CS2HudModelWeapon] (550 fields)
+
+[C_AK47] (550 fields)
+
+[C_WeaponAug] (550 fields)
+
+[C_WeaponAWP] (550 fields)
+
+[C_WeaponBizon] (550 fields)
+
+[C_WeaponFamas] (550 fields)
+
+[C_WeaponFiveSeven] (550 fields)
+
+[C_WeaponG3SG1] (550 fields)
+
+[C_WeaponGalilAR] (550 fields)
+
+[C_WeaponGlock] (550 fields)
+
+[C_WeaponHKP2000] (550 fields)
+
+[C_WeaponUSPSilencer] (550 fields)
+
+[C_WeaponM4A1] (550 fields)
+
+[C_WeaponM4A1Silencer] (550 fields)
+
+[C_WeaponMAC10] (550 fields)
+
+[C_WeaponMag7] (550 fields)
+
+[C_WeaponMP5SD] (550 fields)
+
+[C_WeaponMP7] (550 fields)
+
+[C_WeaponMP9] (550 fields)
+
+[C_WeaponNegev] (550 fields)
+
+[C_WeaponP250] (550 fields)
+
+[C_WeaponP90] (550 fields)
+
+[C_WeaponSCAR20] (550 fields)
+
+[C_WeaponSG556] (550 fields)
+
+[C_WeaponSSG08] (550 fields)
+
+[C_WeaponTec9] (550 fields)
+
+[C_WeaponUMP45] (550 fields)
+
+[C_WeaponM249] (550 fields)
+
+[C_WeaponRevolver] (550 fields)
+
+[C_WeaponNOVA] (550 fields)
+
+[C_WeaponSawedoff] (550 fields)
+
+[C_WeaponXM1014] (550 fields)
+
+[C_MolotovGrenade] (550 fields)
+
+[C_IncendiaryGrenade] (550 fields)
+
+[C_DecoyGrenade] (550 fields)
+
+[C_Flashbang] (550 fields)
+
+[C_HEGrenade] (550 fields)
+
+[C_SmokeGrenade] (550 fields)
+
+=== End of dump ===

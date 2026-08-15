@@ -10,6 +10,8 @@ bool ESP::GetBoundingBox(C_CSPlayerPawn* pPawn, ImVec2& vecMin, ImVec2& vecMax)
         return false;
 
     Vector vecOrigin = pSceneNode->m_vecAbsOrigin();
+    if (vecOrigin.x == 0.f && vecOrigin.y == 0.f && vecOrigin.z == 0.f)
+        return false;
 
     float flHeadZ = 72.f;
     CCollisionProperty* pCollision = pPawn->m_pCollision();
@@ -278,32 +280,35 @@ void ESP::DrawSkeleton(C_CSPlayerPawn* pPawn, const Color& col)
     if (!pBones || reinterpret_cast<std::uintptr_t>(pBones) < 0x1000) return;
 
     // pairs: { parent, child }
+    // CS2 bone indices (may need adjustment per update)
     static const std::pair<int,int> skeleton[] = {
-        {6,  5},   // neck -> head
+        {6,  5},   // head -> neck
         {5,  4},   // spine top
-        {4,  3},   // spine mid
-        {3,  2},   // spine low
+        {4,  2},   // spine low
         {2,  0},   // pelvis
         // arms
         {5,  8},   // neck -> left shoulder
         {8,  9},   // left upper arm
-        {9,  10},  // left forearm
+        {9,  11},  // left forearm -> hand
         {5,  13},  // neck -> right shoulder
         {13, 14},  // right upper arm
-        {14, 15},  // right forearm
+        {14, 16},  // right forearm -> hand
         // legs
-        {0,  22},  // pelvis -> left thigh
-        {22, 23},  // left calf
-        {23, 24},  // left foot
-        {0,  25},  // pelvis -> right thigh
-        {25, 26},  // right calf
-        {26, 27},  // right foot
+        {0,  23},  // pelvis -> left thigh
+        {23, 24},  // left calf
+        {24, 25},  // left foot
+        {0,  26},  // pelvis -> right thigh
+        {26, 27},  // right calf
+        {27, 28},  // right foot
     };
 
     for (auto& [parent, child] : skeleton)
     {
         BoneData_t bParent = g_Memory.ReadMemory<BoneData_t>(reinterpret_cast<std::uintptr_t>(pBones) + parent * sizeof(BoneData_t));
         BoneData_t bChild  = g_Memory.ReadMemory<BoneData_t>(reinterpret_cast<std::uintptr_t>(pBones) + child  * sizeof(BoneData_t));
+
+        if (bParent.m_vecPosition.x == 0.f && bParent.m_vecPosition.y == 0.f) continue;
+        if (bChild.m_vecPosition.x == 0.f && bChild.m_vecPosition.y == 0.f) continue;
 
         ImVec2 scrParent, scrChild;
         if (!Draw::WorldToScreen(bParent.m_vecPosition, scrParent)) continue;
@@ -328,6 +333,7 @@ void ESP::DrawFilledBody(C_CSPlayerPawn* pPawn, const Color& col)
     auto ReadBone = [&](int idx) -> ImVec2 {
         BoneData_t b = g_Memory.ReadMemory<BoneData_t>(
             reinterpret_cast<std::uintptr_t>(pBones) + idx * sizeof(BoneData_t));
+        if (b.m_vecPosition.x == 0.f && b.m_vecPosition.y == 0.f) return ImVec2(-1, -1);
         ImVec2 scr;
         if (!Draw::WorldToScreen(b.m_vecPosition, scr))
             return ImVec2(-1, -1);
@@ -336,13 +342,13 @@ void ESP::DrawFilledBody(C_CSPlayerPawn* pPawn, const Color& col)
 
     auto Valid = [](const ImVec2& v) { return v.x >= 0 && v.y >= 0; };
 
-    // Read bones
+    // Read bones (updated indices for CS2)
     ImVec2 head = ReadBone(6), neck = ReadBone(5);
     ImVec2 spineTop = ReadBone(4), pelvis = ReadBone(0);
-    ImVec2 lShoulder = ReadBone(8), lElbow = ReadBone(9), lHand = ReadBone(10);
-    ImVec2 rShoulder = ReadBone(13), rElbow = ReadBone(14), rHand = ReadBone(15);
-    ImVec2 lThigh = ReadBone(22), lKnee = ReadBone(23), lFoot = ReadBone(24);
-    ImVec2 rThigh = ReadBone(25), rKnee = ReadBone(26), rFoot = ReadBone(27);
+    ImVec2 lShoulder = ReadBone(8), lElbow = ReadBone(9), lHand = ReadBone(11);
+    ImVec2 rShoulder = ReadBone(13), rElbow = ReadBone(14), rHand = ReadBone(16);
+    ImVec2 lThigh = ReadBone(23), lKnee = ReadBone(24), lFoot = ReadBone(25);
+    ImVec2 rThigh = ReadBone(26), rKnee = ReadBone(27), rFoot = ReadBone(28);
 
     if (!Valid(neck) || !Valid(pelvis)) return;
 
@@ -388,13 +394,54 @@ void ESP::DrawFilledBody(C_CSPlayerPawn* pPawn, const Color& col)
 }
 
 // -----------------------------------------------------------------------
+// Draw: Off-Screen ESP (Arrows pointing to enemies outside the screen)
+// -----------------------------------------------------------------------
+void ESP::DrawOffScreenESP(C_CSPlayerPawn* pPawn, const Color& col)
+{
+    C_CSPlayerPawn* pLocal = g_Globals.m_LocalPlayer.m_pPlayerPawn;
+    if (!pLocal || !pPawn) return;
+
+    CGameSceneNode* pLocalNode = pLocal->m_pGameSceneNode();
+    CGameSceneNode* pEnemyNode = pPawn->m_pGameSceneNode();
+    if (!pLocalNode || !pEnemyNode) return;
+
+    Vector vecLocalOrigin = pLocalNode->m_vecAbsOrigin();
+    Vector vecEnemyOrigin = pEnemyNode->m_vecAbsOrigin();
+
+    QAngle angView = g_Interfaces.m_CSGOInput.m_angViewAngle;
+    
+    Vector vecDelta = vecEnemyOrigin - vecLocalOrigin;
+    float flYaw = atan2(vecDelta.y, vecDelta.x) * (180.f / M_PI);
+    float flYawDelta = flYaw - angView.y;
+
+    // Normalize flYawDelta
+    while (flYawDelta > 180.f) flYawDelta -= 360.f;
+    while (flYawDelta < -180.f) flYawDelta += 360.f;
+
+    float flYawRad = flYawDelta * (M_PI / 180.f);
+    
+    float flCX = Window::m_iWidth * 0.5f;
+    float flCY = Window::m_iHeight * 0.5f;
+    
+    float flRadius = std::min(Window::m_iWidth, Window::m_iHeight) * 0.35f;
+    
+    ImVec2 tip(flCX - sin(flYawRad) * (flRadius + 15.f), flCY - cos(flYawRad) * (flRadius + 15.f));
+    ImVec2 base1(flCX - sin(flYawRad + 0.08f) * flRadius, flCY - cos(flYawRad + 0.08f) * flRadius);
+    ImVec2 base2(flCX - sin(flYawRad - 0.08f) * flRadius, flCY - cos(flYawRad - 0.08f) * flRadius);
+    
+    Draw::AddTriangle(tip, base1, base2, col, DRAW_TRIANGLE_FILLED, Color(0, 0, 0, 150), 1.f);
+}
+
+// -----------------------------------------------------------------------
 // Main per-player render
 // -----------------------------------------------------------------------
 void ESP::RenderPlayer(CCSPlayerController* pController, C_CSPlayerPawn* pPawn)
 {
     ImVec2 vecMin, vecMax;
     if (!GetBoundingBox(pPawn, vecMin, vecMax))
+    {
         return;
+    }
 
     Color col = GetPlayerColor(pController, pPawn);
 
@@ -466,7 +513,7 @@ void ESP::RenderPlayer(CCSPlayerController* pController, C_CSPlayerPawn* pPawn)
                         C_BasePlayerWeapon* pWeapon = hWeaponHandle.Get();
                         if (pWeapon && reinterpret_cast<std::uintptr_t>(pWeapon) > 0x1000)
                         {
-                            if (pWeapon->GetItemDefinitionIndex() == 49) // 49 = WEAPON_C4
+                            if (pWeapon->GetSchemaName() == "C_C4" || pWeapon->GetItemDefinitionIndex() == 49) // C4 Check
                             {
                                 bHasC4 = true;
                                 break;
@@ -540,95 +587,227 @@ void ESP::RenderGlowInfo(CCSPlayerController* pController, C_CSPlayerPawn* pPawn
 // -----------------------------------------------------------------------
 // Render global map grenades (Smoke, Molotov, HE)
 // -----------------------------------------------------------------------
+// -----------------------------------------------------------------------
+// Grenade position tracking for trajectory prediction
+// -----------------------------------------------------------------------
+struct GrenadeTrack_t
+{
+    std::uintptr_t  m_uEntityPtr = 0;
+    Vector          m_vecPrevPos = {};
+    Vector          m_vecVelocity = {};
+    bool            m_bHasPrev = false;
+    int             m_nTicksAlive = 0;
+};
+static std::vector<GrenadeTrack_t> s_vecGrenadeTracker;
+
+static GrenadeTrack_t* FindOrCreateTracker(std::uintptr_t uEntityPtr)
+{
+    for (auto& t : s_vecGrenadeTracker)
+    {
+        if (t.m_uEntityPtr == uEntityPtr)
+            return &t;
+    }
+    // Eski trackerlar uchun limit
+    if (s_vecGrenadeTracker.size() > 32)
+        s_vecGrenadeTracker.erase(s_vecGrenadeTracker.begin());
+
+    s_vecGrenadeTracker.push_back({ uEntityPtr, {}, {}, false, 0 });
+    return &s_vecGrenadeTracker.back();
+}
+
 void ESP::RenderGrenades(const std::vector<EntityObject_t>& vecEntities)
 {
     if (!CONFIG_GET(bool, g_Variables.m_Misc.m_bGrenadeWarning)) return;
+
+    // Barcha trackerlarni "eskirgan" deb belgilash
+    for (auto& t : s_vecGrenadeTracker)
+        t.m_nTicksAlive++;
+
+    // 120 tickdan eski trackerlarni o'chirish
+    s_vecGrenadeTracker.erase(
+        std::remove_if(s_vecGrenadeTracker.begin(), s_vecGrenadeTracker.end(),
+            [](const GrenadeTrack_t& t) { return t.m_nTicksAlive > 120; }),
+        s_vecGrenadeTracker.end());
 
     for (const EntityObject_t& obj : vecEntities)
     {
         if (obj.m_pEntity == nullptr || obj.m_eType != EEntityType::ENTITY_GRENADE)
             continue;
 
-        bool bIsSmoke = (obj.m_uHashedName == FNV1A::HashConst("C_SmokeGrenadeProjectile"));
-        bool bIsMolotov = (obj.m_uHashedName == FNV1A::HashConst("C_MolotovProjectile") || 
-                           obj.m_uHashedName == FNV1A::HashConst("C_HEGrenadeProjectile") || 
-                           obj.m_uHashedName == FNV1A::HashConst("C_FlashbangProjectile"));
+        bool bIsSmoke = (obj.m_uHashedName == FNV1A::HashConst("C_SmokeGrenadeProjectile") || obj.m_uHashedName == FNV1A::HashConst("smokegrenade_projectile"));
+        bool bIsMolotov = (obj.m_uHashedName == FNV1A::HashConst("C_MolotovProjectile") || obj.m_uHashedName == FNV1A::HashConst("molotov_projectile"));
+        bool bIsHE = (obj.m_uHashedName == FNV1A::HashConst("C_HEGrenadeProjectile") || obj.m_uHashedName == FNV1A::HashConst("hegrenade_projectile"));
+        bool bIsFlash = (obj.m_uHashedName == FNV1A::HashConst("C_FlashbangProjectile") || obj.m_uHashedName == FNV1A::HashConst("flashbang_projectile"));
+        bool bIsDecoy = (obj.m_uHashedName == FNV1A::HashConst("C_DecoyProjectile") || obj.m_uHashedName == FNV1A::HashConst("decoy_projectile"));
 
-        if (bIsSmoke || bIsMolotov)
+        if (!bIsSmoke && !bIsMolotov && !bIsHE && !bIsFlash && !bIsDecoy)
+            continue;
+
+        static std::uint32_t uGameSceneNodeOffset = 0;
+        static std::uint32_t uOriginOffset = 0;
+        static bool bResolved = false;
+        
+        if (!bResolved)
         {
-            static std::uint32_t uGameSceneNodeOffset = 0;
-            static std::uint32_t uOriginOffset = 0;
-            static bool bSceneResolved = false;
-            
-            if (!bSceneResolved)
+            uGameSceneNodeOffset = SchemaSystem::m_mapSchemaOffsets[FNV1A::Hash("C_BaseEntity->m_pGameSceneNode")];
+            uOriginOffset = SchemaSystem::m_mapSchemaOffsets[FNV1A::Hash("CGameSceneNode->m_vecAbsOrigin")];
+            bResolved = true;
+        }
+
+        if (uGameSceneNodeOffset == 0 || uOriginOffset == 0) continue;
+
+        std::uintptr_t pEntityPtr = reinterpret_cast<std::uintptr_t>(obj.m_pEntity);
+        std::uintptr_t uSceneNode = g_Memory.ReadMemory<std::uintptr_t>(pEntityPtr + uGameSceneNodeOffset);
+        if (uSceneNode < 0x1000) continue;
+
+        Vector vecOrigin = g_Memory.ReadMemory<Vector>(uSceneNode + uOriginOffset);
+        if (!std::isfinite(vecOrigin.x) || !std::isfinite(vecOrigin.y) || !std::isfinite(vecOrigin.z))
+            continue;
+
+        // === Tracker: pozitsiyadan velocity hisoblash ===
+        GrenadeTrack_t* pTracker = FindOrCreateTracker(pEntityPtr);
+        pTracker->m_nTicksAlive = 0; // bu entity hali tirik
+
+        if (pTracker->m_bHasPrev)
+        {
+            Vector vecDelta;
+            vecDelta.x = vecOrigin.x - pTracker->m_vecPrevPos.x;
+            vecDelta.y = vecOrigin.y - pTracker->m_vecPrevPos.y;
+            vecDelta.z = vecOrigin.z - pTracker->m_vecPrevPos.z;
+
+            // ~60fps atrofida, har frame = ~0.016s
+            float flScale = 60.f; // frames -> units/sec
+            pTracker->m_vecVelocity.x = vecDelta.x * flScale;
+            pTracker->m_vecVelocity.y = vecDelta.y * flScale;
+            pTracker->m_vecVelocity.z = vecDelta.z * flScale;
+        }
+        pTracker->m_vecPrevPos = vecOrigin;
+        pTracker->m_bHasPrev = true;
+
+        // Rang va nom
+        const char* szName = "GRENADE";
+        Color colLine(255, 255, 255, 255);
+
+        if (bIsSmoke)       { szName = "SMOKE";   colLine = Color(100, 180, 255, 255); }
+        else if (bIsMolotov){ szName = "MOLOTOV";  colLine = Color(255, 100, 30, 255);  }
+        else if (bIsHE)     { szName = "HE";       colLine = Color(255, 180, 0, 255);   }
+        else if (bIsFlash)  { szName = "FLASH";    colLine = Color(255, 255, 100, 255);  }
+        else if (bIsDecoy)  { szName = "DECOY";    colLine = Color(150, 150, 150, 255);  }
+
+        Vector vecVelocity = pTracker->m_vecVelocity;
+        float flSpeed = std::sqrtf(vecVelocity.x * vecVelocity.x + vecVelocity.y * vecVelocity.y + vecVelocity.z * vecVelocity.z);
+
+        // ============================================================
+        // TRAEKTORIYA CHIZISH
+        // ============================================================
+        if (flSpeed > 30.f)
+        {
+            const float flGravity = 400.f;
+            const float flDt = 0.025f;
+            const int nMaxSteps = 100;
+
+            Vector vecPos = vecOrigin;
+            Vector vecVel = vecVelocity;
+            ImVec2 prevScreen;
+            bool bPrevValid = false;
+            Vector vecLandPos = vecOrigin;
+
+            for (int step = 0; step <= nMaxSteps; step++)
             {
-                uGameSceneNodeOffset = SchemaSystem::m_mapSchemaOffsets[FNV1A::Hash("C_BaseEntity->m_pGameSceneNode")];
-                uOriginOffset = SchemaSystem::m_mapSchemaOffsets[FNV1A::Hash("CGameSceneNode->m_vecAbsOrigin")];
-                bSceneResolved = true;
+                ImVec2 curScreen;
+                bool bCurValid = Draw::WorldToScreen(vecPos, curScreen);
+
+                if (bCurValid && bPrevValid)
+                {
+                    int alpha = 255 - (step * 2);
+                    if (alpha < 50) alpha = 50;
+                    Color colSeg(static_cast<int>(colLine.r()), static_cast<int>(colLine.g()), static_cast<int>(colLine.b()), alpha);
+                    Draw::AddLine(prevScreen, curScreen, colSeg, 2.5f);
+                }
+
+                prevScreen = curScreen;
+                bPrevValid = bCurValid;
+
+                vecVel.z -= flGravity * flDt;
+                vecPos.x += vecVel.x * flDt;
+                vecPos.y += vecVel.y * flDt;
+                vecPos.z += vecVel.z * flDt;
+                vecLandPos = vecPos;
+
+                if (vecPos.z < vecOrigin.z - 600.f)
+                    break;
             }
 
-            if (uGameSceneNodeOffset > 0 && uOriginOffset > 0)
+            // === TUSHISH JOYI ===
+            ImVec2 landScreen;
+            if (Draw::WorldToScreen(vecLandPos, landScreen))
             {
-                std::uintptr_t uSceneNode = g_Memory.ReadMemory<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(obj.m_pEntity) + uGameSceneNodeOffset);
-                if (uSceneNode > 0x1000)
-                {
-                    Vector vecOrigin = g_Memory.ReadMemory<Vector>(uSceneNode + uOriginOffset);
-                    if (std::isfinite(vecOrigin.x) && std::isfinite(vecOrigin.y) && std::isfinite(vecOrigin.z))
-                    {
-                        ImVec2 screenPos;
-                        if (Draw::WorldToScreen(vecOrigin, screenPos))
-                        {
-                            std::string strLabel = "";
-                            Color colText = Color(255, 255, 255, 255);
-                            Color colCircle = colText;
+                Draw::AddCircle(landScreen, 18.f, colLine, 24, DRAW_CIRCLE_NONE, Color(0,0,0,0), 2.5f);
+                Draw::AddLine(ImVec2(landScreen.x - 8.f, landScreen.y - 8.f),
+                              ImVec2(landScreen.x + 8.f, landScreen.y + 8.f), colLine, 2.5f);
+                Draw::AddLine(ImVec2(landScreen.x + 8.f, landScreen.y - 8.f),
+                              ImVec2(landScreen.x - 8.f, landScreen.y + 8.f), colLine, 2.5f);
 
-                            if (bIsSmoke) {
-                                strLabel = "SMOKE";
-                                colCircle = Color(150, 150, 255, 200);
-                                colText = Color(200, 200, 255, 255);
-                            } else if (obj.m_uHashedName == FNV1A::HashConst("C_MolotovProjectile")) {
-                                strLabel = "MOLOTOV";
-                                colCircle = Color(255, 50, 50, 200);
-                                colText = Color(255, 100, 100, 255);
-                            } else if (obj.m_uHashedName == FNV1A::HashConst("C_HEGrenadeProjectile")) {
-                                strLabel = "HE GRENADE";
-                                colCircle = Color(255, 150, 0, 200);
-                                colText = Color(255, 200, 50, 255);
-                            } else if (obj.m_uHashedName == FNV1A::HashConst("C_FlashbangProjectile")) {
-                                strLabel = "FLASHBANG";
-                                colCircle = Color(255, 255, 150, 200);
-                                colText = Color(255, 255, 200, 255);
-                            }
+                char szLand[64];
+                snprintf(szLand, sizeof(szLand), "%s TUSHADI!", szName);
+                Draw::AddText(Fonts::ESP, Fonts::ESP->FontSize,
+                    ImVec2(landScreen.x + 22.f, landScreen.y - 6.f),
+                    szLand, colLine, DRAW_TEXT_DROPSHADOW, Color(0, 0, 0, 200));
+            }
+        }
 
-                            // 1. Draw a small, clean marker marking the exact center in 3D
-                            Draw::AddRing(vecOrigin, 15.0f, colCircle, 32, 0, 2.0f);
+        // ============================================================
+        // HOZIRGI JOYI
+        // ============================================================
+        ImVec2 screenPos;
+        if (Draw::WorldToScreen(vecOrigin, screenPos))
+        {
+            Draw::AddRing(vecOrigin, 15.0f, colLine, 32, 0, 2.0f);
 
-                            // 2. Draw the Text Label above the center
-                            ImVec2 textSize = Fonts::ESP->CalcTextSizeA(Fonts::ESP->FontSize, FLT_MAX, 0.f, strLabel.c_str());
-                            Draw::AddText(Fonts::ESP, Fonts::ESP->FontSize, 
-                                          ImVec2(screenPos.x - textSize.x * 0.5f, screenPos.y - 15.f), 
-                                          strLabel, colText, DRAW_TEXT_DROPSHADOW, Color(0,0,0,200));
-                        }
-                    }
+            float dist = 0.f;
+            C_CSPlayerPawn* pLocalPawn = g_Globals.m_LocalPlayer.m_pPlayerPawn;
+            if (pLocalPawn) {
+                std::uintptr_t uLocalScene = g_Memory.ReadMemory<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(pLocalPawn) + uGameSceneNodeOffset);
+                if (uLocalScene > 0x1000) {
+                    Vector vecLocalOrigin = g_Memory.ReadMemory<Vector>(uLocalScene + uOriginOffset);
+                    dist = vecLocalOrigin.DistTo(vecOrigin) * 0.0254f;
                 }
             }
+
+            char szInfo[64];
+            if (dist > 0.f)
+                snprintf(szInfo, sizeof(szInfo), "%s [%.0fm]", szName, dist);
+            else
+                snprintf(szInfo, sizeof(szInfo), "%s", szName);
+
+            ImVec2 textSize = Fonts::ESP->CalcTextSizeA(Fonts::ESP->FontSize, FLT_MAX, 0.f, szInfo);
+            Draw::AddText(Fonts::ESP, Fonts::ESP->FontSize,
+                          ImVec2(screenPos.x - textSize.x * 0.5f, screenPos.y - 15.f),
+                          szInfo, colLine, DRAW_TEXT_DROPSHADOW, Color(0,0,0,200));
         }
     }
 }
 
 void ESP::RenderWeapons(const std::vector<EntityObject_t>& vecEntities)
 {
-    if (!CONFIG_GET(bool, g_Variables.m_ESP.m_bDroppedWeapons))
+    bool bDrawWeapons = CONFIG_GET(bool, g_Variables.m_ESP.m_bDroppedWeapons);
+    bool bDrawC4Timer = CONFIG_GET(bool, g_Variables.m_Misc.m_bC4Timer);
+
+    if (!bDrawWeapons && !bDrawC4Timer)
         return;
 
     static std::uintptr_t uGameSceneNodeOffset = 0;
     static std::uintptr_t uOriginOffset = 0;
+    static std::uintptr_t uC4Blow = 0;
+    static std::uintptr_t uC4Defused = 0;
     static bool bOffsetsResolved = false;
 
     if (!bOffsetsResolved) {
         auto mapCpy = SchemaSystem::m_mapSchemaOffsets;
         uGameSceneNodeOffset = mapCpy[FNV1A::Hash("C_BaseEntity->m_pGameSceneNode")];
         uOriginOffset = mapCpy[FNV1A::Hash("CGameSceneNode->m_vecAbsOrigin")];
+        uC4Blow = mapCpy[FNV1A::HashConst("C_PlantedC4->m_flC4Blow")];
+        uC4Defused = mapCpy[FNV1A::HashConst("C_PlantedC4->m_bBombDefused")];
         bOffsetsResolved = true;
     }
 
@@ -638,8 +817,17 @@ void ESP::RenderWeapons(const std::vector<EntityObject_t>& vecEntities)
 
     for (const EntityObject_t& obj : vecEntities)
     {
-        if (obj.m_pEntity == nullptr || obj.m_eType != EEntityType::ENTITY_WEAPON)
+        if (obj.m_pEntity == nullptr || (obj.m_eType != EEntityType::ENTITY_WEAPON && obj.m_eType != EEntityType::ENTITY_PLANTEDC4))
             continue;
+
+        std::string sSchemaName = obj.m_pEntity->GetSchemaName();
+        bool bIsC4 = (sSchemaName == "C_C4" || sSchemaName == "weapon_c4");
+
+        if (obj.m_eType == EEntityType::ENTITY_WEAPON)
+        {
+            if (!bDrawWeapons && !bIsC4) continue;
+            if (bIsC4 && !bDrawWeapons && !bDrawC4Timer) continue;
+        }
 
         std::uintptr_t pEntityPtr = reinterpret_cast<std::uintptr_t>(obj.m_pEntity);
         std::uintptr_t uSceneNode = g_Memory.ReadMemory<std::uintptr_t>(pEntityPtr + uGameSceneNodeOffset);
@@ -664,8 +852,10 @@ void ESP::RenderWeapons(const std::vector<EntityObject_t>& vecEntities)
             if (Draw::WorldToScreen(vecOrigin, screenPos))
             {
                 std::string sName = obj.m_pEntity->GetSchemaName();
+                if (obj.m_eType == EEntityType::ENTITY_PLANTEDC4) sName = "C4 PLANTED!";
+
                 if (!sName.empty()) {
-                    if (sName.find("Weapon") != std::string::npos || sName == "C_DEagle" || sName == "C_AK47") {
+                    if (sName.find("Weapon") != std::string::npos || sName == "C_DEagle" || sName == "C_AK47" || sName == "C_C4" || obj.m_eType == EEntityType::ENTITY_PLANTEDC4) {
                         if (sName.find("C_Weapon") != std::string::npos) sName = sName.substr(8);
                         else if (sName.find("CWeapon") != std::string::npos) sName = sName.substr(7);
                         else if (sName.find("C_") != std::string::npos) sName = sName.substr(2);
@@ -673,7 +863,7 @@ void ESP::RenderWeapons(const std::vector<EntityObject_t>& vecEntities)
                         std::string sLowerName = sName;
                         std::transform(sLowerName.begin(), sLowerName.end(), sLowerName.begin(), ::tolower);
 
-                        Color colWeapon = GetWeaponColor(sLowerName);
+                        Color colWeapon = (sName == "C4" || obj.m_eType == EEntityType::ENTITY_PLANTEDC4) ? Color(255, 50, 50, 255) : GetWeaponColor(sLowerName);
 
                         float flBottomY = screenPos.y; // Track bottom of drawn element
 
@@ -705,6 +895,31 @@ void ESP::RenderWeapons(const std::vector<EntityObject_t>& vecEntities)
                         {
                             std::transform(sName.begin(), sName.end(), sName.begin(), ::toupper);
                             std::string strLabel = "[" + sName + "]";
+
+                            // Add C4 timer logic if it's planted C4
+                            if (obj.m_eType == EEntityType::ENTITY_PLANTEDC4)
+                            {
+                                float flC4Blow = g_Memory.ReadMemory<float>(pEntityPtr + uC4Blow);
+                                float flCur = g_Interfaces.m_GlobalVars.m_flCurrentTime;
+                                float flTimeLeft = flC4Blow - flCur;
+                                if (flTimeLeft < 0.f) flTimeLeft = 0.f;
+                                
+                                char szTimer[64];
+                                snprintf(szTimer, sizeof(szTimer), "[C4 PLANTED! - %.1f s]", flTimeLeft);
+                                strLabel = szTimer;
+                                
+                                bool bDefused = g_Memory.ReadMemory<bool>(pEntityPtr + uC4Defused);
+                                if (bDefused) {
+                                    strLabel = "[C4 DEFUSED!]";
+                                    colWeapon = Color(100, 255, 100, 255);
+                                }
+                                else if (flTimeLeft < 10.0f && flTimeLeft > 0.0f) {
+                                    // Flash red/yellow
+                                    if ((int)(flCur * 10) % 2 == 0) colWeapon = Color(255, 255, 0, 255);
+                                    else colWeapon = Color(255, 0, 0, 255);
+                                }
+                            }
+
                             ImVec2 textSize = Fonts::ESP->CalcTextSizeA(Fonts::ESP->FontSize, FLT_MAX, 0.f, strLabel.c_str());
                             Draw::AddText(Fonts::ESP, Fonts::ESP->FontSize, 
                                           ImVec2(screenPos.x - textSize.x * 0.5f, screenPos.y), 
@@ -732,3 +947,65 @@ void ESP::RenderWeapons(const std::vector<EntityObject_t>& vecEntities)
     }
 }
 
+std::vector<ESP::DamageIndicator_t> ESP::g_vecDamageIndicators;
+
+void ESP::AddDamageIndicator(Vector vecPos, int iDamage)
+{
+    DamageIndicator_t text;
+    text.m_vecPos = vecPos;
+    // Kichik tasodifiy siljish (overlap bo'lmasligi uchun)
+    text.m_vecPos.x += (rand() % 20) - 10.f;
+    text.m_vecPos.y += (rand() % 20) - 10.f;
+    text.m_vecPos.z += (rand() % 10) - 5.f;
+    text.m_iDamage = iDamage;
+    text.m_flTimeCreated = (float)ImGui::GetTime(); // Use ImGui time which is safe in RenderThread
+
+    g_vecDamageIndicators.push_back(text);
+}
+
+void ESP::RenderDamageIndicators()
+{
+    if (!CONFIG_GET(bool, g_Variables.m_Misc.m_bDamageIndicator))
+        return;
+
+    float flCurrentTime = (float)ImGui::GetTime();
+    float flLifetime = 1.5f;
+
+    for (auto it = g_vecDamageIndicators.begin(); it != g_vecDamageIndicators.end(); )
+    {
+        float flTimeDelta = flCurrentTime - it->m_flTimeCreated;
+        if (flTimeDelta > flLifetime)
+        {
+            it = g_vecDamageIndicators.erase(it);
+            continue;
+        }
+
+        Vector vecRenderPos = it->m_vecPos;
+        vecRenderPos.z += flTimeDelta * 40.0f; // float upwards
+
+        ImVec2 vecScreen;
+        if (Draw::WorldToScreen(vecRenderPos, vecScreen))
+        {
+            float flAlpha = 1.0f;
+            if (flTimeDelta > (flLifetime - 0.5f))
+            {
+                flAlpha = (flLifetime - flTimeDelta) / 0.5f;
+            }
+
+            Color baseCol = CONFIG_GET(Color, g_Variables.m_Misc.m_colDamageIndicator);
+            Color renderCol = Color((int)(baseCol.rBase() * 255.f), (int)(baseCol.gBase() * 255.f), (int)(baseCol.bBase() * 255.f), (int)(flAlpha * 255.f));
+            Color shadowCol = Color(0, 0, 0, (int)(flAlpha * 255.f));
+
+            char buf[32];
+            snprintf(buf, sizeof(buf), "-%d", it->m_iDamage);
+
+            // Kattaroq va qalinroq font uchun default emas, balki shunchaki kattalashtiramiz
+            float flFontSize = Fonts::Default->FontSize * 1.5f;
+            ImVec2 textSize = Fonts::Default->CalcTextSizeA(flFontSize, FLT_MAX, 0.0f, buf);
+
+            Draw::AddText(Fonts::Default, flFontSize, ImVec2(vecScreen.x - textSize.x / 2.f, vecScreen.y - textSize.y / 2.f), buf, renderCol, DRAW_TEXT_OUTLINE, shadowCol);
+        }
+
+        ++it;
+    }
+}

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="packages\Microsoft.Windows.CppWinRT.2.0.220531.1\build\native\Microsoft.Windows.CppWinRT.props" Condition="Exists('packages\Microsoft.Windows.CppWinRT.2.0.220531.1\build\native\Microsoft.Windows.CppWinRT.props')" />
   <ItemGroup Label="ProjectConfigurations">
@@ -67,7 +67,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <ExceptionHandling>Async</ExceptionHandling>
-      <AdditionalOptions>/Zm300 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/Zm300 /utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -92,7 +92,7 @@
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <ExceptionHandling>Async</ExceptionHandling>
       <LanguageStandard_C>Default</LanguageStandard_C>
-      <AdditionalOptions>/Zm300 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/Zm300 /utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -102,6 +102,11 @@
       <AdditionalDependencies>d3d11.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <UACExecutionLevel>RequireAdministrator</UACExecutionLevel>
     </Link>
+    <PostBuildEvent>
+      <Command>copy /Y "$(ProjectDir)ct_image.png" "$(OutDir)ct_image.png"
+copy /Y "$(ProjectDir)ct_login.png" "$(OutDir)ct_login.png"
+copy /Y "$(ProjectDir)t_login.png" "$(OutDir)t_login.png"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="ext\curl\curl.h" />
@@ -196,10 +201,12 @@
     <ClInclude Include="src\features\esp\PlayerGlow.h" />
     <ClInclude Include="src\features\esp\WeaponIcons.h" />
     <ClInclude Include="src\features\radar\Radar.h" />
-    <ClInclude Include="src\features\radar\WebRadar.h" />
-    <ClInclude Include="src\features\skinchanger\SkinChanger.h" />
     <ClInclude Include="src\features\triggerbot\Triggerbot.h" />
     <ClInclude Include="src\features\world\World.h" />
+    <ClInclude Include="src\features\skins\Skins.h" />
+    <ClInclude Include="src\features\tracer\Tracer.h" />
+    <ClInclude Include="src\features\loot\LootESP.h" />
+    <ClInclude Include="src\features\thirdperson\ThirdPerson.h" />
     <ClInclude Include="src\license\HttpClient.h" />
     <ClInclude Include="src\license\License.h" />
     <ClInclude Include="src\Globals.h" />
@@ -247,10 +254,13 @@
     <ClCompile Include="src\features\esp\PlayerGlow.cpp" />
     <ClCompile Include="src\features\esp\WeaponIcons.cpp" />
     <ClCompile Include="src\features\radar\Radar.cpp" />
-    <ClCompile Include="src\features\radar\WebRadar.cpp" />
-    <ClCompile Include="src\features\skinchanger\SkinChanger.cpp" />
     <ClCompile Include="src\features\triggerbot\Triggerbot.cpp" />
     <ClCompile Include="src\features\world\World.cpp" />
+    <ClCompile Include="src\features\skins\SkinsDB.cpp" />
+    <ClCompile Include="src\features\skins\SkinsApply.cpp" />
+    <ClCompile Include="src\features\tracer\Tracer.cpp" />
+    <ClCompile Include="src\features\loot\LootESP.cpp" />
+    <ClCompile Include="src\features\thirdperson\ThirdPerson.cpp" />
     <ClCompile Include="src\Globals.cpp" />
     <ClCompile Include="src\gui\Gui.cpp" />
     <ClCompile Include="src\gui\LoginWindow.cpp" />

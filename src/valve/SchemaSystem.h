@@ -19,6 +19,7 @@
 namespace SchemaSystem
 {
 	bool Setup();
+	void ApplyFallbacks();
 
 	inline std::unordered_map<FNV1A_t, std::uint32_t> m_mapSchemaOffsets;
 }

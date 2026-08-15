@@ -12,7 +12,7 @@ void CLicense::Load()
 
     std::cout << std::endl;
     std::cout << "  ==============================" << std::endl;
-    std::cout << "  SHIFTHUB.UZ - Login" << std::endl;
+    std::cout << "  KAEL_CHEAT - Login" << std::endl;
     std::cout << "  ==============================" << std::endl;
 
     for (int attempt = 0; attempt < 5; attempt++)
@@ -86,13 +86,36 @@ bool CLicense::CheckLicense()
     if (m_strToken.empty()) return false;
 
     Http::Response resp = Http::Get(m_strApiUrl + "/api/license/check", m_strToken);
-    if (!resp.success) return false;
+    if (!resp.success || resp.body.empty())
+    {
+        // Agar server bilan bog'lanib bo'lmasa — login vaqtida olingan tier ni saqlaymiz
+        // (Offline mode: JWT tier dan foydalanamiz)
+        std::cout << X("  [LICENSE] Server bilan bog'lanib bo'lmadi, login tierni saqlaymiz.") << std::endl;
+        return false; // tier o'ZGARTIRILMAYDI
+    }
 
     try
     {
         json jResp = json::parse(resp.body);
-        if (!jResp.value("valid", false)) { m_eTier = ETier::LITE; return false; }
 
+        if (!jResp.value("valid", false))
+        {
+            // valid:false — sabab nima?
+            std::string reason = jResp.value("reason", "");
+            if (reason == "blocked")
+            {
+                // Bloklangan foydalanuvchi — chiqish
+                std::cout << X("  [LICENSE] Akkaunt bloklangan!") << std::endl;
+                m_eTier = ETier::LITE;
+                return false;
+            }
+            // Boshqa sabablar (expired, va hokazo) — login vaqtidagi tier ni SAQLASH
+            // Login paytida server allaqachon tier ni bergan, uni o'chirmaymiz
+            std::cout << X("  [LICENSE] Check qaytmadi (") << reason << X("), login tierni saqlaymiz.") << std::endl;
+            return false;
+        }
+
+        // valid:true — tier ni yangilaymiz
         std::string strTier = jResp.value("tier", "free");
         if (strTier == "pro")       m_eTier = ETier::PRO;
         else if (strTier == "mid")  m_eTier = ETier::MID;
@@ -100,7 +123,11 @@ bool CLicense::CheckLicense()
 
         return true;
     }
-    catch (...) { return false; }
+    catch (...) 
+    { 
+        // JSON parse xato — login tierni saqlaymiz
+        return false; 
+    }
 }
 
 // -----------------------------------------------------------------------
@@ -123,9 +150,7 @@ void CLicense::DownloadDependencies()
         json jResp = json::parse(resp.body);
         if (!jResp.contains("files")) return;
 
-        char szExePath[MAX_PATH] = {};
-        GetModuleFileNameA(nullptr, szExePath, MAX_PATH);
-        std::filesystem::path weaponsDir = std::filesystem::path(szExePath).parent_path() / "weapons";
+        std::filesystem::path weaponsDir = std::filesystem::temp_directory_path() / "shifthub_weapons";
         std::filesystem::create_directories(weaponsDir);
 
         for (auto& jFile : jResp["files"])

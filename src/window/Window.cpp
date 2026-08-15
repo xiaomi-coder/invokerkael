@@ -219,11 +219,29 @@ bool Window::Render()
         if (message.message == WM_QUIT)
             bRunning = false;
 
-        if (GetAsyncKeyState(CONFIG_GET(int, g_Variables.m_Gui.m_iUnloadKey)) & 1)
+        // VK_END = close app
+        if (GetAsyncKeyState(VK_END) & 1)
             return false;
 
-        if (GetAsyncKeyState(CONFIG_GET(int, g_Variables.m_Gui.m_iMenuKey)) & 1)
-            Gui::m_bOpen = !Gui::m_bOpen;
+        // UNLOAD KEY = close app completely
+        if (GetAsyncKeyState(CONFIG_GET(int, g_Variables.m_Gui.m_iUnloadKey)) & 0x8000)
+        {
+            return false;
+        }
+
+        static bool s_bMenuPressed = false;
+        if (GetAsyncKeyState(CONFIG_GET(int, g_Variables.m_Gui.m_iMenuKey)) & 0x8000)
+        {
+            if (!s_bMenuPressed)
+            {
+                Gui::m_bOpen = !Gui::m_bOpen;
+                s_bMenuPressed = true;
+            }
+        }
+        else
+        {
+            s_bMenuPressed = false;
+        }
 
         ImGui_ImplDX11_NewFrame();
         ImGui_ImplWin32_NewFrame();
@@ -265,7 +283,7 @@ bool Window::Render()
 
         // overlay with vsync example
         // m_pSwapChain->Present(1U, 0U);
-        m_pSwapChain->Present(0U, DXGI_PRESENT_DO_NOT_WAIT);   
+        m_pSwapChain->Present(0U, 0U);
     }
 
     if (!bRunning)

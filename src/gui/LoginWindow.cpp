@@ -1,10 +1,10 @@
 #include "../Includes.h"
 #include <json.hpp>
-
-// stb_image for background loading
-#include "../../ext/stb/stb_image.h"
-
 using json = nlohmann::json;
+
+// =====================================================================
+//  KAEL_CHEAT  ::  CYBERPUNK LOGIN / LOADER
+// =====================================================================
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -30,7 +30,7 @@ static LRESULT CALLBACK LoginWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
     return DefWindowProcW(hWnd, msg, wParam, lParam);
 }
 
-// Helpers
+// Non-blocking CS2 check
 static bool IsCS2Running()
 {
     PROCESSENTRY32 pe = {}; pe.dwSize = sizeof(pe);
@@ -45,56 +45,64 @@ static bool IsCS2Running()
     return found;
 }
 
-static bool LoadTextureFromFile(const char* filename, ID3D11Device* d3dDevice, ID3D11ShaderResourceView** out_srv, int* out_width, int* out_height)
+// Load a PNG sitting next to the exe into a D3D11 texture on the login
+// window's own device. Missing file / decode failure just leaves the
+// portrait blank — never fatal.
+static ID3D11ShaderResourceView* LoadPortrait(ID3D11Device* pDevice, const char* szFileName, int& iW, int& iH)
 {
-    int image_width = 0;
-    int image_height = 0;
-    unsigned char* image_data = stbi_load(filename, &image_width, &image_height, NULL, 4);
-    if (image_data == NULL)
-        return false;
+    char szExe[MAX_PATH];
+    if (!GetModuleFileNameA(NULL, szExe, MAX_PATH)) return nullptr;
+    std::string strPath(szExe);
+    const size_t pos = strPath.find_last_of("\\/");
+    if (pos != std::string::npos) strPath = strPath.substr(0, pos + 1);
+    strPath += szFileName;
 
-    D3D11_TEXTURE2D_DESC desc;
-    ZeroMemory(&desc, sizeof(desc));
-    desc.Width = image_width;
-    desc.Height = image_height;
-    desc.MipLevels = 1;
-    desc.ArraySize = 1;
-    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    desc.SampleDesc.Count = 1;
-    desc.Usage = D3D11_USAGE_DEFAULT;
-    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-    desc.CPUAccessFlags = 0;
+    std::error_code ec;
+    if (!std::filesystem::exists(strPath, ec)) return nullptr;
 
-    ID3D11Texture2D* pTexture = NULL;
-    D3D11_SUBRESOURCE_DATA subResource;
-    subResource.pSysMem = image_data;
-    subResource.SysMemPitch = desc.Width * 4;
-    subResource.SysMemSlicePitch = 0;
-    d3dDevice->CreateTexture2D(&desc, &subResource, &pTexture);
+    int iCh = 0;
+    unsigned char* pData = stbi_load(strPath.c_str(), &iW, &iH, &iCh, 4);
+    if (!pData) return nullptr;
 
-    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
-    ZeroMemory(&srvDesc, sizeof(srvDesc));
-    srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-    srvDesc.Texture2D.MipLevels = desc.MipLevels;
-    srvDesc.Texture2D.MostDetailedMip = 0;
-    d3dDevice->CreateShaderResourceView(pTexture, &srvDesc, out_srv);
-    pTexture->Release();
+    D3D11_TEXTURE2D_DESC desc = {};
+    desc.Width = iW; desc.Height = iH; desc.MipLevels = 1; desc.ArraySize = 1;
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; desc.SampleDesc.Count = 1;
+    desc.Usage = D3D11_USAGE_DEFAULT; desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 
-    *out_width = image_width;
-    *out_height = image_height;
-    stbi_image_free(image_data);
+    D3D11_SUBRESOURCE_DATA sub = {}; sub.pSysMem = pData; sub.SysMemPitch = iW * 4;
 
-    return true;
+    ID3D11Texture2D* pTex = nullptr;
+    HRESULT hr = pDevice->CreateTexture2D(&desc, &sub, &pTex);
+    stbi_image_free(pData);
+    if (FAILED(hr) || !pTex) return nullptr;
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC srv = {};
+    srv.Format = desc.Format; srv.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+    srv.Texture2D.MipLevels = 1;
+
+    ID3D11ShaderResourceView* pSRV = nullptr;
+    hr = pDevice->CreateShaderResourceView(pTex, &srv, &pSRV);
+    pTex->Release();
+    return SUCCEEDED(hr) ? pSRV : nullptr;
 }
 
 // ===================================================================
+static ImFont* LoginFont(ImGuiIO& io, const char* const* paths, int n, float size, ImFontConfig* cfg, const ImWchar* ranges)
+{
+    for (int i = 0; i < n; i++)
+    {
+        std::error_code ec;
+        if (!std::filesystem::exists(paths[i], ec)) continue;
+        if (ImFont* f = io.Fonts->AddFontFromFileTTF(paths[i], size, cfg, ranges))
+            return f;
+    }
+    return io.Fonts->AddFontDefault();
+}
+
 bool LoginWindow::Create()
 {
     if (m_bInitialized) return true;
-    
-    // YANADA KENGROQ OYNA (Kael/Invoker foni uchun maxsus 800x500 o'lcham)
-    int wndW = 860, wndH = 500;
+    int wndW = 960, wndH = 620;
     int scrW = GetSystemMetrics(SM_CXSCREEN), scrH = GetSystemMetrics(SM_CYSCREEN);
 
     m_wc = {};
@@ -103,10 +111,13 @@ bool LoginWindow::Create()
     m_wc.lpfnWndProc = LoginWndProc;
     m_wc.hInstance = GetModuleHandleW(NULL);
     m_wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-    m_wc.lpszClassName = L"KaeL_Cheat_Login";
+    m_wc.lpszClassName = L"SH_Login_v2";
     RegisterClassExW(&m_wc);
 
-    m_hWnd = CreateWindowExW(0, m_wc.lpszClassName, L"KaeL Cheat",
+    // Build wide title with version
+    wchar_t wszTitle[64];
+    swprintf_s(wszTitle, L"KAEL_CHEAT v%hs", SHIFTHUB_VERSION);
+    m_hWnd = CreateWindowExW(0, m_wc.lpszClassName, wszTitle,
         WS_POPUP | WS_VISIBLE, (scrW - wndW) / 2, (scrH - wndH) / 2, wndW, wndH,
         NULL, NULL, m_wc.hInstance, NULL);
     if (!m_hWnd) return false;
@@ -132,67 +143,98 @@ bool LoginWindow::Create()
     ImGui_ImplDX11_Init(m_pDevice, m_pContext);
 
     ImGuiIO& io = ImGui::GetIO();
+    io.IniFilename = nullptr; // Disable imgui.ini generation
+
+    static const char* const kBody[] = { "C:\\Windows\\Fonts\\segoeui.ttf",  "C:\\Windows\\Fonts\\Verdana.ttf" };
+    static const char* const kBold[] = { "C:\\Windows\\Fonts\\segoeuib.ttf", "C:\\Windows\\Fonts\\Verdanab.ttf", "C:\\Windows\\Fonts\\segoeui.ttf" };
+    static const char* const kMono[] = { "C:\\Windows\\Fonts\\consola.ttf",  "C:\\Windows\\Fonts\\cour.ttf" };
+
+    const ImWchar* ranges = UI::GlyphRanges();
+
     ImFontConfig cfg = {};
-    cfg.FontBuilderFlags = ImGuiFreeTypeBuilderFlags_LightHinting | ImGuiFreeTypeBuilderFlags_Bold;
-    io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\Verdana.ttf", 18, &cfg, io.Fonts->GetGlyphRangesCyrillic());
+    cfg.FontBuilderFlags = ImGuiFreeTypeBuilderFlags_LightHinting;
+    ImFontConfig cfgB = {};
+    cfgB.FontBuilderFlags = ImGuiFreeTypeBuilderFlags_LightHinting | ImGuiFreeTypeBuilderFlags_Bold;
+
+    Fonts::Default = LoginFont(io, kBody, IM_ARRAYSIZE(kBody), 16.f, &cfg,  ranges);
+    Fonts::Small   = LoginFont(io, kBody, IM_ARRAYSIZE(kBody), 12.f, &cfg,  ranges);
+    Fonts::Title   = LoginFont(io, kBold, IM_ARRAYSIZE(kBold), 34.f, &cfgB, ranges);
+    Fonts::Mono    = LoginFont(io, kMono, IM_ARRAYSIZE(kMono), 13.f, &cfgB, ranges);
+
     ImGuiFreeType::BuildFontAtlas(io.Fonts, 0);
+
+    m_pCtTexture = LoadPortrait(m_pDevice, "ct_login.png", m_iCtTexW, m_iCtTexH);
+    m_pTTexture  = LoadPortrait(m_pDevice, "t_login.png",  m_iTTexW,  m_iTTexH);
 
     m_bInitialized = true;
     return true;
 }
 
-static void ApplyKaelTheme()
+// ===================================================================
+//  Local drawing helpers
+// ===================================================================
+static void CenteredText(ImDrawList* dl, float W, float y, const char* txt, ImU32 col, ImFont* font = nullptr)
 {
-    ImGuiStyle& s = ImGui::GetStyle();
-    s.WindowRounding = 0; s.FrameRounding = 6; s.GrabRounding = 6;
-    s.WindowBorderSize = 0; s.FrameBorderSize = 0;
-    s.ItemSpacing = { 8, 12 }; s.FramePadding = { 12, 10 };
-    auto* c = s.Colors;
-    
-    // Kael theme (Dark red/orange accents)
-    c[ImGuiCol_WindowBg]       = { 0.05f, 0.05f, 0.05f, 0.0f }; // Asos oynani shaffof qildik, orqadan rasm ko'rinishi uchun
-    c[ImGuiCol_FrameBg]        = { 0.15f, 0.12f, 0.12f, 0.8f };
-    c[ImGuiCol_FrameBgHovered] = { 0.20f, 0.15f, 0.15f, 0.9f };
-    c[ImGuiCol_FrameBgActive]  = { 0.8f,  0.4f,  0.1f,  0.6f };
-    c[ImGuiCol_Text]           = { 0.95f, 0.90f, 0.85f, 1.0f };
-    c[ImGuiCol_TextDisabled]   = { 0.50f, 0.45f, 0.40f, 1.0f };
-    c[ImGuiCol_Button]         = { 0.70f, 0.35f, 0.10f, 1.0f };
-    c[ImGuiCol_ButtonHovered]  = { 0.85f, 0.45f, 0.15f, 1.0f };
-    c[ImGuiCol_ButtonActive]   = { 0.95f, 0.55f, 0.20f, 1.0f };
-    c[ImGuiCol_CheckMark]      = { 1.00f, 0.60f, 0.20f, 1.0f };
+    if (font) ImGui::PushFont(font);
+    ImVec2 ts = ImGui::CalcTextSize(txt);
+    dl->AddText(ImVec2((W - ts.x) * 0.5f, y), col, txt);
+    if (font) ImGui::PopFont();
 }
 
-enum class EPhase { LOGIN, CONNECTING, LOADING, READY, DONE };
+// Animated background: grid + drifting data streaks + scanlines + vignette
+static void DrawBackdrop(ImDrawList* dl, float W, float H, float flTime)
+{
+    dl->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2(W, H),
+        IM_COL32(8, 11, 18, 255), IM_COL32(8, 11, 18, 255),
+        IM_COL32(4, 6, 11, 255),  IM_COL32(6, 5, 12, 255));
+
+    // perspective-ish grid
+    UI::Grid(dl, ImVec2(0, 0), ImVec2(W, H), IM_COL32(34, 226, 255, 8), 26.f);
+
+    // drifting vertical data streaks
+    for (int i = 0; i < 7; i++)
+    {
+        float x  = fmodf(37.f + (float)i * 71.f, W);
+        float sp = 40.f + (float)((i * 37) % 60);
+        float y  = fmodf(flTime * sp + (float)i * 90.f, H + 160.f) - 160.f;
+        ImU32 c  = (i % 3 == 0) ? UI::COL_MAGENTA : UI::COL_CYAN;
+        dl->AddRectFilledMultiColor(ImVec2(x, y), ImVec2(x + 1.f, y + 150.f),
+            UI::Fade(c, 0.f), UI::Fade(c, 0.f), UI::Fade(c, 0.22f), UI::Fade(c, 0.22f));
+    }
+
+    // scanlines + top/bottom neon frame
+    UI::Scanlines(dl, ImVec2(0, 0), ImVec2(W, H), IM_COL32(0, 0, 0, 26), 3.f);
+
+    dl->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2(W, 3.f),
+        UI::COL_CYAN, UI::COL_MAGENTA, UI::COL_MAGENTA, UI::COL_CYAN);
+
+    dl->AddRect(ImVec2(1, 1), ImVec2(W - 1, H - 1), UI::Fade(UI::COL_CYAN, 0.35f), 0.f, 0, 1.f);
+    UI::Brackets(dl, ImVec2(6, 6), ImVec2(W - 6, H - 6), UI::COL_CYAN, 22.f, 1.8f);
+}
+
+// ===================================================================
+enum class EPhase { LOGIN, LOADING, READY, DONE };
 
 bool LoginWindow::Run()
 {
     if (!m_bInitialized) return false;
-    ApplyKaelTheme();
+    UI::ApplyTheme();
 
-    // Rasm uchun o'zgaruvchilar
-    ID3D11ShaderResourceView* bgTexture = nullptr;
-    int bgW = 0, bgH = 0;
-    bool bHasBg = LoadTextureFromFile("kael_bg.jpg", m_pDevice, &bgTexture, &bgW, &bgH);
+    EPhase ePhase = EPhase::LOGIN;
+    float flPulse = 0.f;
 
-    EPhase ePhase = EPhase::LOGIN; // Dual Mode support
-    g_License.m_strUser = "";
-    g_License.m_eTier = ETier::LITE;
-    char szUser[64] = "", szPass[64] = "";
-    std::string strError;
-    float flTimer = 0.f, flPulse = 0.f;
-
+    // Loading steps
     struct Step {
         const char* name;
         const char* icon;
         float prog; bool done;
     };
     Step steps[] = {
-        { "Litsenziyani tekshirish",  "[ AUTH ]", 0, false },
-        { "Fayllarni yuklash",        "[ INIT ]", 0, false },
-        { "Counter-Strike 2",         "[ GAME ]", 0, false },
-        { "Dasturni sozlash",         "[ CORE ]", 0, false },
+        { "Tizimni tekshirish",       "01", 0, false },
+        { "Counter-Strike 2",         "02", 0, false },
+        { "Dasturni sozlash",         "03", 0, false },
     };
-    int nSteps = 4, nCur = 0;
+    int nSteps = 3, nCur = 0;
     bool bCS2Found = false;
     float flCS2CheckTimer = 0.f;
 
@@ -218,274 +260,338 @@ bool LoginWindow::Run()
 
         ImGui::SetNextWindowPos({ 0, 0 });
         ImGui::SetNextWindowSize(io.DisplaySize);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
         ImGui::Begin("##Main", nullptr,
             ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
             ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-            ImGuiWindowFlags_NoCollapse);
+            ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoCollapse);
 
         ImDrawList* dl = ImGui::GetWindowDrawList();
+        DrawBackdrop(dl, W, H, flPulse);
 
-        // 1. Fon Rasmini Chizish
-        if (bHasBg)
+        // === CLOSE BUTTON ===
         {
-            dl->AddImage((ImTextureID)bgTexture, ImVec2(0, 0), ImVec2(W, H));
+            ImGui::SetCursorPos({ W - 38.f, 12.f });
+            ImGui::InvisibleButton("##close", { 26.f, 26.f });
+            bool hov = ImGui::IsItemHovered();
+            if (ImGui::IsItemClicked()) exit(0);
+            ImVec2 mn = ImGui::GetItemRectMin(), mx = ImGui::GetItemRectMax();
+            if (hov)
+            {
+                dl->AddRectFilled(mn, mx, UI::Fade(UI::COL_RED, 0.18f), 3.f);
+                dl->AddRect(mn, mx, UI::Fade(UI::COL_RED, 0.7f), 3.f, 0, 1.f);
+            }
+            ImU32 colX = hov ? UI::COL_RED : UI::COL_TEXT_FAINT;
+            dl->AddLine({ mn.x + 8.f, mn.y + 8.f }, { mx.x - 8.f, mx.y - 8.f }, colX, 1.6f);
+            dl->AddLine({ mx.x - 8.f, mn.y + 8.f }, { mn.x + 8.f, mx.y - 8.f }, colX, 1.6f);
         }
-        else
-        {
-            // Agar rasm topilmasa, oddiy qora/qizg'ish gradient qilinadi
-            dl->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2(W, H),
-                IM_COL32(15, 10, 10, 255), IM_COL32(40, 15, 10, 255),
-                IM_COL32(20, 10, 10, 255), IM_COL32(10, 5, 5, 255));
-        }
-
-        // X Button (Top Right)
-        {
-            ImGui::SetCursorPos({ W - 35, 8 });
-            ImGui::PushStyleColor(ImGuiCol_Button, { 0, 0, 0, 0 });
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, { 0.8f, 0.2f, 0.2f, 0.8f });
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, { 0.9f, 0.2f, 0.2f, 1.0f });
-            ImGui::PushStyleColor(ImGuiCol_Text, { 0.8f, 0.8f, 0.8f, 1.0f });
-            if (ImGui::Button("X", { 25, 25 })) exit(0);
-            ImGui::PopStyleColor(4);
-        }
-
-        // 2. Login Oyna Dizayni (O'ng tomonda quyuq panel)
-        float panelW = 380;
-        float panelX = W - panelW - 30; // O'ng chekkadan sal ichkarida
-        float panelY = 40;
-        float panelH = H - 80;
-
-        // Panel Orqa Foni (Shaffof qora/to'q jigar rang)
-        dl->AddRectFilled(ImVec2(panelX, panelY), ImVec2(panelX + panelW, panelY + panelH), IM_COL32(12, 10, 10, 220), 12.f);
-        dl->AddRect(ImVec2(panelX, panelY), ImVec2(panelX + panelW, panelY + panelH), IM_COL32(150, 80, 20, 150), 12.f, 0, 2.f);
 
         // ===============================================================
-        //  LOGIN SCREEN
+        //  START  (vaqtincha: login / parol o'chirilgan — bitta tugma)
+        //  Login formasi kerak bo'lsa — git history'dagi CONNECTING
+        //  blokini tiklash yetarli.
         // ===============================================================
-        if (ePhase == EPhase::LOGIN || ePhase == EPhase::CONNECTING)
+        if (ePhase == EPhase::LOGIN)
         {
-            float fW = 300.f, fX = panelX + (panelW - fW) * 0.5f;
+            const float fW = 360.f, fX = (W - fW) * 0.5f;
 
-            // Sarlavha
-            ImGui::SetCursorPosY(panelY + 40);
+            // --- faction portraits (flanking the login card) ---
+            auto DrawFaction = [&](ID3D11ShaderResourceView* pTex, int texW, int texH,
+                                    bool bLeft, ImU32 accent, const char* szLabel)
             {
-                const char* t = "P R O J E C T   K A E L";
-                ImGui::SetCursorPosX(panelX + (panelW - ImGui::CalcTextSize(t).x) * 0.5f);
-                ImGui::PushStyleColor(ImGuiCol_Text, { 1.0f, 0.65f, 0.20f, 1.0f });
-                ImGui::Text("%s", t);
-                ImGui::PopStyleColor();
-            }
+                if (!pTex || texW <= 0 || texH <= 0) return;
+
+                const float pw = 300.f, ph = pw * (float)texH / (float)texW;
+                const float mx0 = bLeft ? 26.f : W - 26.f - pw;
+                const float my0 = (H - ph) * 0.5f - 18.f;
+                ImVec2 mn(mx0, my0), mx(mx0 + pw, my0 + ph);
+
+                ImU32 tint = UI::Mix(IM_COL32(20, 24, 34, 255), accent, 0.34f);
+                dl->AddImage((ImTextureID)pTex, mn, mx, ImVec2(0, 0), ImVec2(1, 1), UI::Fade(tint, 0.92f));
+
+                // fade the portrait into the dark backdrop on the inner edge
+                if (bLeft)
+                    dl->AddRectFilledMultiColor(ImVec2(mx.x - 70.f, mn.y), mx,
+                        UI::Fade(UI::COL_BG, 0.f), IM_COL32(8, 11, 18, 255), IM_COL32(8, 11, 18, 255), UI::Fade(UI::COL_BG, 0.f));
+                else
+                    dl->AddRectFilledMultiColor(mn, ImVec2(mn.x + 70.f, mx.y),
+                        IM_COL32(8, 11, 18, 255), UI::Fade(UI::COL_BG, 0.f), UI::Fade(UI::COL_BG, 0.f), IM_COL32(8, 11, 18, 255));
+
+                dl->AddRectFilledMultiColor(ImVec2(mn.x, mx.y - 60.f), mx,
+                    UI::Fade(UI::COL_BG, 0.f), UI::Fade(UI::COL_BG, 0.f), IM_COL32(8, 11, 18, 235), IM_COL32(8, 11, 18, 235));
+
+                dl->AddRect(mn, mx, UI::Fade(accent, 0.55f), 3.f, 0, 1.f);
+                UI::Brackets(dl, mn, mx, accent, 16.f, 1.6f);
+                UI::GlowRect(dl, mn, mx, accent, 3.f, 4, 0.5f);
+
+                float wLbl = UI::ChipWidth(szLabel);
+                UI::Chip(szLabel, accent, ImVec2(bLeft ? mn.x : mx.x - wLbl, mx.y - 30.f));
+            };
+
+            DrawFaction(m_pCtTexture, m_iCtTexW, m_iCtTexH, true,  UI::COL_CYAN,    "SPETSNAZ // CT");
+            DrawFaction(m_pTTexture,  m_iTTexW,  m_iTTexH,  false, UI::COL_MAGENTA, "TERRORCHI // T");
+
+            // --- logo mark ---
             {
-                const char* st = "INVOKER X CS2 OPERATIVE";
-                ImGui::SetCursorPosY(panelY + 65);
-                ImGui::SetCursorPosX(panelX + (panelW - ImGui::CalcTextSize(st).x) * 0.5f);
-                ImGui::PushStyleColor(ImGuiCol_Text, { 0.6f, 0.5f, 0.4f, 1.0f });
-                ImGui::Text("%s", st);
-                ImGui::PopStyleColor();
-            }
-
-            dl->AddLine({ panelX + 30, panelY + 95 }, { panelX + panelW - 30, panelY + 95 }, IM_COL32(180, 80, 20, 100));
-
-            ImGui::SetCursorPos({ fX, panelY + 130 });
-
-            // USERNAME
-            ImGui::PushStyleColor(ImGuiCol_Text, { 0.8f, 0.7f, 0.6f, 1 }); ImGui::Text("Foydalanuvchi nomi"); ImGui::PopStyleColor();
-            ImGui::SetCursorPosX(fX); ImGui::PushItemWidth(fW);
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, { 14, 12 });
-            bool e1 = ImGui::InputText("##user", szUser, sizeof(szUser), ImGuiInputTextFlags_EnterReturnsTrue);
-            ImGui::PopStyleVar(); ImGui::PopItemWidth();
-            
-            // PASSWORD
-            ImGui::SetCursorPosX(fX);
-            ImGui::PushStyleColor(ImGuiCol_Text, { 0.8f, 0.7f, 0.6f, 1 }); ImGui::Text("Parol"); ImGui::PopStyleColor();
-            ImGui::SetCursorPosX(fX); ImGui::PushItemWidth(fW);
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, { 14, 12 });
-            bool e2 = ImGui::InputText("##pass", szPass, sizeof(szPass), ImGuiInputTextFlags_Password | ImGuiInputTextFlags_EnterReturnsTrue);
-            ImGui::PopStyleVar(); ImGui::PopItemWidth();
-            
-            ImGui::Spacing(); ImGui::Spacing();
-
-            if (ePhase == EPhase::LOGIN)
-            {
-                // KIRISH BUTTON
-                ImGui::SetCursorPosX(fX);
-                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, { 0, 16 });
-                bool bClickPro = ImGui::Button("P R O  L O G I N", { fW, 0 });
-                
-                ImGui::SetCursorPosX(fX);
-                ImGui::PushStyleColor(ImGuiCol_Button, { 0.2f, 0.2f, 0.2f, 1.0f });
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, { 0.3f, 0.3f, 0.3f, 1.0f });
-                bool bClickFree = ImGui::Button("B E P U L  K I R I S H   (FREE)", { fW, 0 });
-                ImGui::PopStyleColor(2);
-                ImGui::PopStyleVar();
-
-                if (bClickFree)
-                {
-                    g_License.m_strToken = "free_token";
-                    g_License.m_strUser = "BEPUL (Free)";
-                    g_License.m_eTier = ETier::LITE;
-                    g_License.m_strExpiry = "N/A";
-                    ePhase = EPhase::LOADING; nCur = 0;
-                    for (int i = 0; i < nSteps; i++) { steps[i].prog = 0; steps[i].done = false; }
-                    bCS2Found = false;
-                }
-                else if ((bClickPro || e1 || e2) && strlen(szUser) > 0 && strlen(szPass) > 0)
-                { strError.clear(); ePhase = EPhase::CONNECTING; flTimer = 0; }
-                else if (bClickPro || e1 || e2)
-                    strError = "Ma'lumotlar to'liq kiritilmadi!";
-            }
-            else // CONNECTING
-            {
-                ImGui::SetCursorPosX(fX);
-                ImGui::PushStyleColor(ImGuiCol_Text, { 1.0f, 0.65f, 0.20f, 1 });
-                ImGui::Text("Tizimga ulanmoqda..."); ImGui::PopStyleColor();
-
-                flTimer += dt; float prog = fminf(flTimer / 1.5f, 1.f);
-                ImGui::SetCursorPosX(fX); ImVec2 bp = ImGui::GetCursorScreenPos();
-                dl->AddRectFilled(bp, { bp.x + fW, bp.y + 5 }, IM_COL32(35, 20, 20, 255), 2);
-                dl->AddRectFilled(bp, { bp.x + fW * prog, bp.y + 5 }, IM_COL32(200, 100, 30, 255), 2);
-
-                if (flTimer >= 1.5f)
-                {
-                    json jBody; jBody["username"] = std::string(szUser); jBody["password"] = std::string(szPass);
-                    Http::Response resp = Http::Post(g_License.m_strApiUrl + "/api/auth/login", jBody.dump());
-
-                    if (!resp.success || resp.body.empty())
-                    {
-                        strError = (resp.statusCode == 0) ? "Server g'oyib bo'ldi!" : "Xato (kod: " + std::to_string(resp.statusCode) + ")";
-                        try { json j = json::parse(resp.body); strError = j.value("error", strError); } catch (...) {}
-                        ePhase = EPhase::LOGIN;
-                    }
-                    else
-                    {
-                        try {
-                            json jr = json::parse(resp.body);
-                            g_License.m_strToken = jr.value("token", "");
-                            g_License.m_strUser = jr["user"].value("username", std::string(szUser));
-                            std::string t = jr["user"].value("tier", "free");
-                            g_License.m_eTier = (t == "pro") ? ETier::PRO : (t == "mid") ? ETier::MID : ETier::LITE;
-                            g_License.m_strExpiry = jr["user"].value("expires_at", "N/A");
-                            ePhase = EPhase::LOADING; nCur = 0;
-                            for (int i = 0; i < nSteps; i++) { steps[i].prog = 0; steps[i].done = false; }
-                            bCS2Found = false;
-                        } catch (...) { strError = "Server ma'lumoti nostandart!"; ePhase = EPhase::LOGIN; }
-                    }
-                }
+                ImVec2 c(W * 0.5f, 128.f);
+                float p = 0.6f + 0.4f * UI::Pulse(2.f);
+                dl->AddNgon(c, 46.f, UI::Fade(UI::COL_CYAN, p), 6, 2.2f);
+                dl->AddNgon(c, 34.f, UI::Fade(UI::COL_MAGENTA, 0.45f), 6, 1.3f);
+                dl->AddNgon(c, 58.f + 5.f * UI::Pulse(1.4f), UI::Fade(UI::COL_CYAN, 0.13f), 6, 1.f);
+                UI::Icon(dl, c, 40.f, UI::ICON_BOLT, UI::Fade(UI::COL_CYAN, p));
             }
 
-            if (!strError.empty())
+            // --- wordmark ---
             {
-                ImGui::Spacing(); ImGui::Spacing();
-                ImGui::SetCursorPosX(panelX + (panelW - ImGui::CalcTextSize(strError.c_str()).x) * 0.5f);
-                ImGui::PushStyleColor(ImGuiCol_Text, { 1, 0.3f, 0.2f, 1 });
-                ImGui::TextWrapped("%s", strError.c_str()); ImGui::PopStyleColor();
+                if (Fonts::Title) ImGui::PushFont(Fonts::Title);
+                ImVec2 s1 = ImGui::CalcTextSize("KAEL");
+                ImVec2 s2 = ImGui::CalcTextSize("_CHEAT");
+                float x0 = (W - (s1.x + s2.x)) * 0.5f;
+                dl->AddText(ImVec2(x0, 196.f), UI::COL_TEXT, "KAEL");
+                dl->AddText(ImVec2(x0 + s1.x, 196.f), UI::COL_MAGENTA, "_CHEAT");
+                if (Fonts::Title) ImGui::PopFont();
             }
+            {
+                char szSub[96];
+                snprintf(szSub, sizeof(szSub), "CS2  EXTERNAL   //   v%s", SHIFTHUB_VERSION);
+                CenteredText(dl, W, 244.f, szSub, UI::COL_TEXT_FAINT, Fonts::Mono);
+            }
+
+            UI::NeonLine(dl, ImVec2(40.f, 274.f), W - 80.f, UI::Fade(UI::COL_CYAN, 0.5f), 1.f);
+
+            // --- status chips ---
+            {
+                const char* c1 = "OFFLINE REJIM";
+                const char* c2 = "BARCHA FUNKSIYALAR OCHIQ";
+                float w1 = UI::ChipWidth(c1), w2 = UI::ChipWidth(c2);
+                float x  = (W - (w1 + w2 + 10.f)) * 0.5f;
+                UI::Chip(c1, UI::COL_TEXT_MUTE, ImVec2(x, 292.f));
+                UI::Chip(c2, UI::COL_GREEN, ImVec2(x + w1 + 10.f, 292.f));
+            }
+
+            // --- START ---
+            {
+                float glow = UI::Pulse(3.f);
+                dl->AddRectFilledMultiColor(ImVec2(fX, 348.f), ImVec2(fX + fW, 350.f),
+                    UI::Fade(UI::COL_CYAN, 0.15f + 0.6f * glow), UI::Fade(UI::COL_MAGENTA, 0.15f + 0.6f * glow),
+                    UI::Fade(UI::COL_MAGENTA, 0.15f + 0.6f * glow), UI::Fade(UI::COL_CYAN, 0.15f + 0.6f * glow));
+            }
+
+            ImGui::SetCursorPos({ fX, 352.f });
+            if (UI::Button("S T A R T", { fW, 54.f }, UI::BTN_PRIMARY))
+            {
+                // Vaqtincha lokal sessiya — serverga so'rov yuborilmaydi
+                g_License.m_strUser   = "KAEL";
+                g_License.m_eTier     = ETier::PRO;          // hamma funksiya ochiq
+                g_License.m_strExpiry = "Cheksiz (LOCAL)";
+                g_License.m_strToken  = "LOCAL";
+
+                ePhase = EPhase::LOADING; nCur = 0;
+                for (int i = 0; i < nSteps; i++) { steps[i].prog = 0; steps[i].done = false; }
+                bCS2Found = false;
+
+                // === asosiy featurelarni avtomatik yoqamiz ===
+                CONFIG_GET(bool, g_Variables.m_PlayerVisuals.m_bEnableVisuals) = true;
+                CONFIG_GET_ARRAY(bool, g_Variables.m_PlayerVisuals.m_vecVisualsModifiers, VISUALS_IGNORE_TEAMMATES) = true;
+                CONFIG_GET(bool, g_Variables.m_PlayerVisuals.m_bDrawBox) = true;
+                CONFIG_GET(bool, g_Variables.m_PlayerVisuals.m_bDrawHealthBar) = true;
+                CONFIG_GET(bool, g_Variables.m_PlayerVisuals.m_bDrawWeapon) = true;
+                CONFIG_GET(bool, g_Variables.m_PlayerVisuals.m_bDrawHasC4) = true;
+                CONFIG_GET(bool, g_Variables.m_Misc.m_bSniperCrosshair) = true;
+                CONFIG_GET(bool, g_Variables.m_SpectatorList.m_bEnableSpectatorList) = true;
+                CONFIG_GET(bool, g_Variables.m_Misc.m_bAntiFlash) = true;
+                CONFIG_GET(bool, g_Variables.m_Misc.m_bC4Timer) = true;
+                CONFIG_GET(bool, g_Variables.m_Misc.m_bGrenadeWarning) = true;
+                CONFIG_GET(bool, g_Variables.m_Misc.m_bWatermark) = true;
+
+                // === MID / PRO featurelari ===
+                CONFIG_GET(bool, g_Variables.m_Bhop.m_bEnableBhop) = true;
+                CONFIG_GET(bool, g_Variables.m_TriggerBot.m_bEnableTriggerbot) = true;
+                CONFIG_GET(bool, g_Variables.m_AimBot.m_bEnableAimbot) = true;
+                CONFIG_GET(bool, g_Variables.m_PlayerGlow.m_bEnableGlow) = true;
+            }
+
+            CenteredText(dl, W, 424.f, "Bosing — CS2 avtomatik topiladi va dastur ishga tushadi",
+                UI::COL_TEXT_FAINT, Fonts::Small);
+            CenteredText(dl, W, 458.f, "Adminga bog'lanish:  @bakoev_71", UI::COL_TEXT_FAINT, Fonts::Small);
+
+            // --- footer ---
+            CenteredText(dl, W, H - 52.f, "1HP_KAEL", UI::Fade(UI::COL_CYAN, 0.6f), Fonts::Mono);
+            CenteredText(dl, W, H - 32.f, "KAEL_CHEAT", UI::COL_TEXT_FAINT, Fonts::Small);
         }
+
+        // ===============================================================
+        //  LOADING / READY
+        // ===============================================================
         else if (ePhase == EPhase::LOADING || ePhase == EPhase::READY)
         {
-            float fW = 320.f, fX = panelX + (panelW - fW) * 0.5f;
-
-            // H HEADER
-            ImGui::SetCursorPosY(panelY + 30);
+            // --- HEADER ---
             {
-                const char* t = "K A E L  C H E A T";
-                ImGui::SetCursorPosX(panelX + (panelW - ImGui::CalcTextSize(t).x) * 0.5f);
-                ImGui::PushStyleColor(ImGuiCol_Text, { 1.0f, 0.65f, 0.2f, 1 });
-                ImGui::Text("%s", t); ImGui::PopStyleColor();
+                ImVec2 c(W * 0.5f, 46.f);
+                float p = 0.6f + 0.4f * UI::Pulse(2.f);
+                dl->AddNgon(c, 20.f, UI::Fade(UI::COL_CYAN, p), 6, 1.6f);
+                UI::Icon(dl, c, 17.f, UI::ICON_BOLT, UI::Fade(UI::COL_CYAN, p));
             }
-            dl->AddLine({ panelX + 30, panelY + 60 }, { panelX + panelW - 30, panelY + 60 }, IM_COL32(180, 80, 20, 100));
+            {
+                char szHdr[64];
+                snprintf(szHdr, sizeof(szHdr), "KAEL_CHEAT  v%s", SHIFTHUB_VERSION);
+                CenteredText(dl, W, 74.f, szHdr, UI::COL_TEXT, Fonts::Mono);
+            }
+            UI::NeonLine(dl, ImVec2(40.f, 96.f), W - 80.f, UI::Fade(UI::COL_CYAN, 0.45f), 1.f);
 
-            // USER INFO
-            ImGui::SetCursorPosY(panelY + 80);
+            // --- CROSSHAIR + GAME ---
+            {
+                float cx = W * 0.5f, cy = 122.f;
+                UI::Icon(dl, ImVec2(cx, cy), 26.f, UI::ICON_CROSSHAIR, UI::Fade(UI::COL_CYAN, 0.8f));
+                CenteredText(dl, W, 142.f, "COUNTER-STRIKE 2", UI::COL_TEXT_FAINT, Fonts::Small);
+            }
+
+            // --- USER STRIP ---
             {
                 std::string nameUp = g_License.m_strUser;
                 for (auto& ch : nameUp) ch = (char)toupper((unsigned char)ch);
-                char info[128];
-                snprintf(info, sizeof(info), "VIP: %s  |  %s", nameUp.c_str(), g_License.GetTierName());
-                ImGui::SetCursorPosX(panelX + (panelW - ImGui::CalcTextSize(info).x) * 0.5f);
-                ImGui::PushStyleColor(ImGuiCol_Text, { 0.9f, 0.8f, 0.7f, 1 });
-                ImGui::Text("%s", info); ImGui::PopStyleColor();
+
+                ImU32 colTier = ImGui::ColorConvertFloat4ToU32(g_License.GetTierColor());
+                float wTier = UI::ChipWidth(g_License.GetTierName());
+                float wName = UI::ChipWidth(nameUp.c_str());
+                float wExp  = UI::ChipWidth(g_License.m_strExpiry.c_str());
+                float total = wTier + wName + wExp + 20.f;
+                float x = (W - total) * 0.5f;
+
+                UI::Chip(g_License.GetTierName(), colTier, ImVec2(x, 168.f));
+                UI::Chip(nameUp.c_str(), UI::COL_TEXT, ImVec2(x + wTier + 10.f, 168.f));
+                UI::Chip(g_License.m_strExpiry.c_str(), UI::COL_TEXT_MUTE, ImVec2(x + wTier + wName + 20.f, 168.f));
             }
 
-            // LOADING STEPS
-            float sY = panelY + 120;
+            // ===== LOADING STEPS =====
+            float sX = 44.f, sW = W - 88.f;
+            float sY = 214.f;
+
             for (int i = 0; i < nSteps; i++)
             {
-                float rowY = sY + i * 55;
-                ImGui::SetCursorPos({ fX, rowY });
-                ImVec4 nameCol = steps[i].done ? ImVec4(1.0f, 0.65f, 0.2f, 1) :
-                    (i == nCur ? ImVec4(0.9f, 0.8f, 0.7f, 1) : ImVec4(0.5f, 0.45f, 0.4f, 1));
-                
-                ImGui::PushStyleColor(ImGuiCol_Text, nameCol);
-                ImGui::Text("%s  %s", steps[i].icon, steps[i].name);
-                ImGui::PopStyleColor();
+                float rowY = sY + i * 74.f;
+                ImVec2 mn(sX, rowY), mx(sX + sW, rowY + 60.f);
 
-                float barY = rowY + 28;
-                dl->AddRectFilled({ fX, barY }, { fX + fW, barY + 4 }, IM_COL32(30, 20, 20, 200), 2);
-                float fillW = fW * steps[i].prog;
-                if (fillW > 0)
-                    dl->AddRectFilled({ fX, barY }, { fX + fillW, barY + 4 }, IM_COL32(200, 120, 30, 255), 2);
+                bool bDone = steps[i].done;
+                bool bCurr = (i == nCur) && !bDone;
+                ImU32 accent = bDone ? UI::COL_GREEN : (bCurr ? UI::COL_CYAN : IM_COL32(40, 52, 70, 255));
+
+                dl->AddRectFilled(mn, mx, bCurr ? IM_COL32(12, 20, 30, 235) : IM_COL32(10, 14, 21, 220), 4.f);
+                dl->AddRect(mn, mx, UI::Fade(accent, bDone || bCurr ? 0.55f : 0.35f), 4.f, 0, 1.f);
+                dl->AddRectFilled(mn, ImVec2(mn.x + 2.5f, mx.y), accent, 1.f);
+                if (bCurr) UI::GlowRect(dl, mn, mx, UI::COL_CYAN, 4.f, 4, 0.8f);
+
+                // index
+                if (Fonts::Mono) ImGui::PushFont(Fonts::Mono);
+                dl->AddText(ImVec2(mn.x + 14.f, rowY + 10.f), UI::Fade(accent, 0.9f), steps[i].icon);
+                if (Fonts::Mono) ImGui::PopFont();
+
+                // name
+                dl->AddText(ImVec2(mn.x + 48.f, rowY + 9.f),
+                    bDone ? UI::COL_GREEN : (bCurr ? UI::COL_TEXT : UI::COL_TEXT_FAINT), steps[i].name);
+
+                // status
+                char szStat[16];
+                if (bDone)      snprintf(szStat, sizeof(szStat), "OK");
+                else if (bCurr) snprintf(szStat, sizeof(szStat), "%d%%", (int)(steps[i].prog * 100));
+                else            snprintf(szStat, sizeof(szStat), "--");
+                ImVec2 ss = ImGui::CalcTextSize(szStat);
+                dl->AddText(ImVec2(mx.x - ss.x - 14.f, rowY + 9.f),
+                    bDone ? UI::COL_GREEN : (bCurr ? UI::COL_CYAN : UI::COL_TEXT_FAINT), szStat);
+
+                // spinner while waiting
+                if (bCurr && i == 1 && !bCS2Found)
+                {
+                    float a = flPulse * 4.f;
+                    ImVec2 sc(mx.x - 34.f, rowY + 40.f);
+                    dl->PathArcTo(sc, 6.f, a, a + 4.2f, 16);
+                    dl->PathStroke(UI::COL_AMBER, 0, 1.6f);
+                }
+
+                // progress rail
+                float barY = rowY + 46.f;
+                dl->AddRectFilled(ImVec2(mn.x + 14.f, barY), ImVec2(mx.x - 14.f, barY + 4.f), IM_COL32(16, 22, 32, 255), 2.f);
+                float fillW = (sW - 28.f) * ImClamp(steps[i].prog, 0.f, 1.f);
+                if (fillW > 0.f)
+                {
+                    dl->AddRectFilledMultiColor(ImVec2(mn.x + 14.f, barY), ImVec2(mn.x + 14.f + fillW, barY + 4.f),
+                        UI::Fade(accent, 0.5f), accent, accent, UI::Fade(accent, 0.5f));
+                }
+
+                if (bCurr && i == 1 && !bCS2Found)
+                    dl->AddText(ImVec2(mn.x + 48.f, rowY + 28.f), UI::COL_AMBER, "CS2 ni oching — kutilmoqda...");
             }
 
-            // ANIMATE
+            // ===== ANIMATE STEPS =====
             if (nCur < nSteps && !steps[nCur].done)
             {
-                if (nCur == 2)
+                if (nCur == 1) // Counter-Strike 2 — wait for CS2
                 {
                     flCS2CheckTimer += dt;
-                    if (flCS2CheckTimer >= 0.5f) { flCS2CheckTimer = 0; bCS2Found = IsCS2Running(); }
+                    if (flCS2CheckTimer >= 0.5f) // check every 500ms
+                    {
+                        flCS2CheckTimer = 0;
+                        bCS2Found = IsCS2Running();
+                    }
+
                     if (bCS2Found)
                     {
-                        steps[nCur].prog += dt / 0.5f;
-                        if (steps[nCur].prog >= 1.f) { steps[nCur].prog = 1; steps[nCur].done = true; nCur++; }
+                        steps[nCur].prog += dt / 0.5f; // fast fill when found
+                        if (steps[nCur].prog >= 1.f)
+                        { steps[nCur].prog = 1; steps[nCur].done = true; nCur++; }
                     }
                     else
                     {
+                        // Pulsing bar to show waiting
                         steps[nCur].prog = (sinf(flPulse * 3.f) + 1.f) * 0.15f + 0.05f;
-                        ImGui::SetCursorPos({ fX, sY + 2 * 55 + 38 });
-                        ImGui::PushStyleColor(ImGuiCol_Text, { 0.7f, 0.3f, 0.3f, 1 });
-                        ImGui::Text("CS2 O'yinini ishga tushiring...");
-                        ImGui::PopStyleColor();
                     }
                 }
-                else
+                else // Other steps — auto progress
                 {
-                    steps[nCur].prog += dt / 0.8f;
+                    float speed = (nCur == 0) ? 1.0f : 0.6f;
+                    steps[nCur].prog += dt / speed;
                     if (steps[nCur].prog >= 1.f)
                     {
                         steps[nCur].prog = 1; steps[nCur].done = true;
-                        if (nCur == 0) g_License.CheckLicense();
-                        if (nCur == 1) g_License.DownloadDependencies();
+
+                        // Real actions
+                        if (nCur == 0 && g_License.m_strToken != "LOCAL")
+                            g_License.CheckLicense();
+
                         nCur++;
                     }
                 }
             }
 
-            if (nCur >= nSteps && ePhase == EPhase::LOADING) ePhase = EPhase::READY;
+            // After last step done → READY
+            if (nCur >= nSteps && ePhase == EPhase::LOADING)
+                ePhase = EPhase::READY;
 
-            // BOSHLASH
+            // === BOSHLASH (when READY) ===
             if (ePhase == EPhase::READY)
             {
-                float btnY = panelY + panelH - 80;
-                ImGui::SetCursorPos({ fX, btnY });
-                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, { 0, 14 });
-                if (ImGui::Button("B O S H L A S H", { fW, 0 })) ePhase = EPhase::DONE;
-                ImGui::PopStyleVar();
+                float btnW = W - 88.f, btnX = 44.f, btnY = H - 134.f;
 
-                // VK Key
+                float glow = UI::Pulse(3.f);
+                dl->AddRectFilledMultiColor(ImVec2(btnX, btnY - 4.f), ImVec2(btnX + btnW, btnY - 2.f),
+                    UI::Fade(UI::COL_CYAN, 0.15f + 0.6f * glow), UI::Fade(UI::COL_MAGENTA, 0.15f + 0.6f * glow),
+                    UI::Fade(UI::COL_MAGENTA, 0.15f + 0.6f * glow), UI::Fade(UI::COL_CYAN, 0.15f + 0.6f * glow));
+
+                ImGui::SetCursorPos({ btnX, btnY });
+                if (UI::Button("B O S H L A S H", { btnW, 46.f }, UI::BTN_PRIMARY))
+                    ePhase = EPhase::DONE;
+
+                // === MENU KEYBIND ===
                 int& menuKey = CONFIG_GET(int, g_Variables.m_Gui.m_iMenuKey);
                 static bool bListeningMenuKey = false;
                 static float fWaitTimer = 0.f;
 
-                ImGui::SetCursorPos({ fX, btnY + 45 });
                 if (bListeningMenuKey)
                 {
-                    ImGui::PushStyleColor(ImGuiCol_Text, { 0.9f, 0.4f, 0.2f, 1 });
-                    ImGui::Text("Tugmani bosing... (Esc bekor)");
-                    ImGui::PopStyleColor();
+                    CenteredText(dl, W, btnY + 58.f, "[ Istalgan tugmani bosing...  ESC = bekor ]", UI::COL_AMBER, Fonts::Mono);
 
                     fWaitTimer -= dt;
-                    if (fWaitTimer < 4.8f)
+                    if (fWaitTimer < 4.8f) // delay 0.2s to ignore mouse click
                     {
                         for (int i = 1; i < 256; i++) {
                             if (GetAsyncKeyState(i) & 0x8000) {
@@ -498,25 +604,42 @@ bool LoginWindow::Run()
                 }
                 else
                 {
-                    char buf[64]; snprintf(buf, sizeof(buf), "Menyu tugmasi: KEY_%d (O'ZGARTIRISH)", menuKey);
-                    
-                    ImGui::PushStyleColor(ImGuiCol_Button, {0,0,0,0});
-                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, { 0.8f, 0.4f, 0.2f, 0.3f });
-                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, { 0.9f, 0.5f, 0.2f, 0.5f });
-                    ImGui::PushStyleColor(ImGuiCol_Text, { 0.7f, 0.6f, 0.5f, 1 });
-                    if (ImGui::Button(buf, ImVec2(fW, 0)))
-                    {
-                        bListeningMenuKey = true;
-                        fWaitTimer = 5.0f;
-                    }
-                    ImGui::PopStyleColor(4);
+                    char buf[96];
+                    snprintf(buf, sizeof(buf), "MENYU TUGMASI:   [ %s ]", UI::KeyName(menuKey));
+
+                    if (Fonts::Mono) ImGui::PushFont(Fonts::Mono);
+                    ImVec2 ts = ImGui::CalcTextSize(buf);
+                    if (Fonts::Mono) ImGui::PopFont();
+
+                    ImGui::SetCursorPos({ (W - ts.x) * 0.5f - 10.f, btnY + 54.f });
+                    ImGui::InvisibleButton("##menukeybtn", { ts.x + 20.f, ts.y + 8.f });
+                    bool hov = ImGui::IsItemHovered();
+                    if (hov) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                    if (ImGui::IsItemClicked()) { bListeningMenuKey = true; fWaitTimer = 5.0f; }
+
+                    ImVec2 mn = ImGui::GetItemRectMin(), mx = ImGui::GetItemRectMax();
+                    if (hov) dl->AddRect(mn, mx, UI::Fade(UI::COL_CYAN, 0.45f), 3.f, 0, 1.f);
+
+                    if (Fonts::Mono) ImGui::PushFont(Fonts::Mono);
+                    dl->AddText(ImVec2(mn.x + 10.f, mn.y + 4.f), hov ? UI::COL_CYAN : UI::COL_TEXT_MUTE, buf);
+                    if (Fonts::Mono) ImGui::PopFont();
                 }
             }
+
+            // --- footer ---
+            CenteredText(dl, W, H - 46.f, "1HP_KAEL", UI::Fade(UI::COL_CYAN, 0.6f), Fonts::Mono);
+            CenteredText(dl, W, H - 26.f, "KAEL_CHEAT  ·  @bakoev_71", UI::COL_TEXT_FAINT, Fonts::Small);
         }
+
+        // ===============================================================
+        //  DONE
+        // ===============================================================
         else if (ePhase == EPhase::DONE)
         {
-            ImGui::End(); ImGui::Render();
-            float cc[4] = { 0, 0, 0, 1 };
+            ImGui::End();
+            ImGui::PopStyleVar();
+            ImGui::Render();
+            float cc[4] = { 0.03f, 0.04f, 0.06f, 1 };
             m_pContext->OMSetRenderTargets(1, &m_pRTV, NULL);
             m_pContext->ClearRenderTargetView(m_pRTV, cc);
             ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
@@ -525,24 +648,27 @@ bool LoginWindow::Run()
         }
 
         ImGui::End();
+        ImGui::PopStyleVar();
         ImGui::Render();
-        float cc[4] = { 0, 0, 0, 1 };
+        float cc[4] = { 0.03f, 0.04f, 0.06f, 1 };
         m_pContext->OMSetRenderTargets(1, &m_pRTV, NULL);
         m_pContext->ClearRenderTargetView(m_pRTV, cc);
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
         m_pSwapChain->Present(1, 0);
     }
-    
-    if (bgTexture) bgTexture->Release();
+
     return true;
 }
 
+// ===================================================================
 void LoginWindow::Destroy()
 {
     if (!m_bInitialized) return;
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
+    if (m_pCtTexture) { m_pCtTexture->Release(); m_pCtTexture = nullptr; }
+    if (m_pTTexture)  { m_pTTexture->Release();  m_pTTexture  = nullptr; }
     if (m_pRTV) { m_pRTV->Release(); m_pRTV = nullptr; }
     if (m_pSwapChain) { m_pSwapChain->Release(); m_pSwapChain = nullptr; }
     if (m_pContext) { m_pContext->Release(); m_pContext = nullptr; }

@@ -124,13 +124,19 @@ public:
 
     std::string GetSchemaName()
     {
-        std::uintptr_t uSchemaNameAddress = g_Memory.ReadMemory(reinterpret_cast<std::uintptr_t>(this) + 0x10, { 0x8, 0x78, 0x8 });
-        if (uSchemaNameAddress == 0U)
-            return {};
+        std::uintptr_t uSchemaNameAddress = g_Memory.ReadMemory(reinterpret_cast<std::uintptr_t>(this) + 0x10, { 0x8, 0x28, 0x8 });
+        std::string strSchemaName = "";
+        
+        if (uSchemaNameAddress != 0U)
+            strSchemaName = g_Memory.ReadMemoryString(uSchemaNameAddress);
 
-        std::string strSchemaName = g_Memory.ReadMemoryString(uSchemaNameAddress);
         if (strSchemaName.empty())
-            return {};
+        {
+            // Fallback to m_designerName
+            std::uintptr_t uDesignerAddress = g_Memory.ReadMemory(reinterpret_cast<std::uintptr_t>(this) + 0x10, { 0x20 });
+            if (uDesignerAddress != 0U)
+                strSchemaName = g_Memory.ReadMemoryString(uDesignerAddress);
+        }
 
         return strSchemaName;
     }
@@ -146,7 +152,7 @@ public:
     SCHEMA(Vector, m_vecAbsOrigin, "CGameSceneNode->m_vecAbsOrigin");
     SCHEMA(CTransform, m_nodeToWorld, "CGameSceneNode->m_nodeToWorld");
 
-    OFFSET(BoneData_t*, m_pBoneCache, 0x1E0) // m_modelState(0x160) + BoneArray(0x80)
+    OFFSET(BoneData_t*, m_pBoneCache, 0x1F8)
 };
 
 class CCollisionProperty
@@ -161,10 +167,17 @@ class C_BaseEntity : public CEntityInstance
 public:
     static C_BaseEntity* GetBaseEntity(int nIdx) noexcept
     {
-        std::uintptr_t uListEntry = g_Memory.ReadMemory<std::uintptr_t>(g_Globals.m_uEntityList + (0x8 * ((nIdx & 0x7FFF) >> 0x9)) + 0x10);
+        // Step 1: Read the first-level pointer from EntityList (already dereferenced once in Globals.cpp)
+        std::uintptr_t uEntityListFirst = g_Memory.ReadMemory<std::uintptr_t>(g_Globals.m_uEntityList);
+        if (!uEntityListFirst)
+            return 0;
+
+        // Step 2: Get the chunk entry for this index
+        std::uintptr_t uListEntry = g_Memory.ReadMemory<std::uintptr_t>(uEntityListFirst + 0x10 + (0x8 * ((nIdx & 0x7FFF) >> 0x9)));
         if (!uListEntry)
             return 0;
 
+        // Step 3: Get the entity from the chunk (0x70 stride per entry)
         C_BaseEntity* pEntity = g_Memory.ReadMemory<C_BaseEntity*>(uListEntry + 0x70 * (nIdx & 0x1FF));
         return pEntity;
     }
@@ -341,22 +354,27 @@ public:
 
     const std::string m_strActiveWeaponName() noexcept
     {
-        static std::uint32_t uOffset = SchemaSystem::m_mapSchemaOffsets[FNV1A::HashConst("C_CSPlayerPawn->m_pClippingWeapon")];
-
-        std::uintptr_t uWeaponNameAddress = 0U;
-        uWeaponNameAddress = g_Memory.ReadMemory(reinterpret_cast<std::uintptr_t>(this) + uOffset, { 0x10, 0x20 });
-        if (uWeaponNameAddress == 0U)
+        CCSPlayer_WeaponServices* pWeaponServices = m_pWeaponServices();
+        if (!pWeaponServices)
             return {};
 
-        std::string strWeaponName = g_Memory.ReadMemoryString(uWeaponNameAddress);
+        CHandle<C_BasePlayerWeapon> hActiveWeapon = pWeaponServices->m_hActiveWeapon();
+        if (!hActiveWeapon.IsValid())
+            return {};
 
-        std::size_t uIndex = strWeaponName.find(X("_"));
+        C_BaseEntity* pWeaponEntity = hActiveWeapon.Get();
+        if (!pWeaponEntity)
+            return {};
+
+        std::string strWeaponName = pWeaponEntity->GetSchemaName();
+        if (strWeaponName.empty())
+            return {};
+
+        std::size_t uIndex = strWeaponName.find("_");
         if (uIndex == std::string::npos || strWeaponName.empty())
-            strWeaponName = {};
-        else
-            strWeaponName = strWeaponName.substr(uIndex + 1, strWeaponName.size() - uIndex - 1);
-
-        return strWeaponName;
+            return strWeaponName;
+        
+        return strWeaponName.substr(uIndex + 1);
     }
 };
 
@@ -400,18 +418,28 @@ class CCSPlayerController : public CBasePlayerController
 public:
     const std::string m_strSanitizedPlayerName() noexcept
     {
-        std::string sBuffer = { };
-        sBuffer.resize(32);
+        // Try m_iszPlayerName directly (usually a fixed char array)
+        static std::uint32_t uNameOffset = SchemaSystem::m_mapSchemaOffsets[FNV1A::HashConst("CBasePlayerController->m_iszPlayerName")];
+        if (uNameOffset == 0) uNameOffset = 1780; // Fallback
 
-        static std::uint32_t uOffset = SchemaSystem::m_mapSchemaOffsets[FNV1A::HashConst("CCSPlayerController->m_sSanitizedPlayerName")];
-        DWORD64 SanitizedPlayerName = g_Memory.ReadMemory<DWORD64>((reinterpret_cast<DWORD64>(this) + uOffset));
-        if (!SanitizedPlayerName)
-            return { };
+        std::string sBuffer = g_Memory.ReadMemoryString(reinterpret_cast<DWORD64>(this) + uNameOffset);
+        
+        // If empty, fallback to m_sSanitizedPlayerName (which might be a pointer)
+        if (sBuffer.empty())
+        {
+            static std::uint32_t uSanitizedOffset = SchemaSystem::m_mapSchemaOffsets[FNV1A::HashConst("CCSPlayerController->m_sSanitizedPlayerName")];
+            if (uSanitizedOffset == 0) uSanitizedOffset = 2144; // Fallback
 
-        sBuffer = g_Memory.ReadMemoryString(SanitizedPlayerName);
+            DWORD64 SanitizedPlayerName = g_Memory.ReadMemory<DWORD64>((reinterpret_cast<DWORD64>(this) + uSanitizedOffset));
+            if (SanitizedPlayerName)
+            {
+                sBuffer = g_Memory.ReadMemoryString(SanitizedPlayerName);
+            }
+        }
         return sBuffer;
     }
 
+    SCHEMA(bool, m_bPawnIsAlive, "CCSPlayerController->m_bPawnIsAlive");
     SCHEMA(CHandle<C_CSPlayerPawn>, m_hPlayerPawn, "CCSPlayerController->m_hPlayerPawn");
     SCHEMA(CHandle<C_CSObserverPawn>, m_hObserverPawn, "CCSPlayerController->m_hObserverPawn");
 };

@@ -178,8 +178,11 @@ namespace Tabs
 
 namespace Fonts
 {
-	inline ImFont* Default;
-	inline ImFont* ESP;
+	inline ImFont* Default = nullptr;   // body text (menu + watermark)
+	inline ImFont* ESP     = nullptr;   // in-world ESP text
+	inline ImFont* Title   = nullptr;   // brand / headline
+	inline ImFont* Small   = nullptr;   // hints, captions
+	inline ImFont* Mono    = nullptr;   // technical readouts, chips
 }
 
 namespace Gui

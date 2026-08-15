@@ -75,6 +75,29 @@ bool Triggerbot::IsEnemyUnderCrosshair(const std::vector<EntityObject_t>& vecEnt
 }
 
 // -----------------------------------------------------------------------
+// V2.0: Random number generator for hitchance and burst
+// -----------------------------------------------------------------------
+static std::mt19937& GetRNG()
+{
+    static std::mt19937 rng(static_cast<unsigned>(
+        std::chrono::high_resolution_clock::now().time_since_epoch().count()));
+    return rng;
+}
+
+static float RandomFloat(float flMin, float flMax)
+{
+    std::uniform_real_distribution<float> dist(flMin, flMax);
+    return dist(GetRNG());
+}
+
+static int RandomInt(int iMin, int iMax)
+{
+    if (iMin >= iMax) return iMin;
+    std::uniform_int_distribution<int> dist(iMin, iMax);
+    return dist(GetRNG());
+}
+
+// -----------------------------------------------------------------------
 void Triggerbot::Run(const std::vector<EntityObject_t>& vecEntities)
 {
     bool bAutoShoot = CONFIG_GET(bool, g_Variables.m_TriggerBot.m_bAutoShoot);
@@ -91,11 +114,32 @@ void Triggerbot::Run(const std::vector<EntityObject_t>& vecEntities)
     if (flDelay > 0.f)
         g_Utilities.Sleep(flDelay);
 
-    // Simulate left mouse button click
-    INPUT inp[2]{};
-    inp[0].type       = INPUT_MOUSE;
-    inp[0].mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
-    inp[1].type       = INPUT_MOUSE;
-    inp[1].mi.dwFlags = MOUSEEVENTF_LEFTUP;
-    SendInput(2, inp, sizeof(INPUT));
+    // V2.0: Hitchance check — random roll to decide whether to shoot
+    float flHitchance = CONFIG_GET(float, g_Variables.m_TriggerBot.m_flHitchance);
+    float flRoll = RandomFloat(0.f, 100.f);
+    if (flRoll > flHitchance)
+        return; // Missed this chance — looks human
+
+    // V2.0: Burst mode — fire 1-N shots with small delay between
+    int iMinBurst = CONFIG_GET(int, g_Variables.m_TriggerBot.m_iMinBurst);
+    int iMaxBurst = CONFIG_GET(int, g_Variables.m_TriggerBot.m_iMaxBurst);
+    if (iMinBurst < 1) iMinBurst = 1;
+    if (iMaxBurst < iMinBurst) iMaxBurst = iMinBurst;
+
+    int iBurstCount = RandomInt(iMinBurst, iMaxBurst);
+
+    for (int i = 0; i < iBurstCount; i++)
+    {
+        // Simulate left mouse button click
+        INPUT inp[2]{};
+        inp[0].type       = INPUT_MOUSE;
+        inp[0].mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
+        inp[1].type       = INPUT_MOUSE;
+        inp[1].mi.dwFlags = MOUSEEVENTF_LEFTUP;
+        SendInput(2, inp, sizeof(INPUT));
+
+        // Small delay between burst shots (30-60ms — human-like)
+        if (i < iBurstCount - 1)
+            g_Utilities.Sleep(RandomFloat(30.f, 60.f));
+    }
 }

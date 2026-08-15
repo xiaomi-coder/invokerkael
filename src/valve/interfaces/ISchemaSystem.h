@@ -32,6 +32,7 @@ public:
 	const char* m_szName;
 	const char* m_szModuleName;
 	const char* m_szUnknownStr;
+	void* m_pClassInfoOldSynthesized;
 	CSchemaClass* m_Class;
 };
 

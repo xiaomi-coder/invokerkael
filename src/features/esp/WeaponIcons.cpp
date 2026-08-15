@@ -69,16 +69,8 @@ static bool LoadTextureFromFile(const std::string& szPath, WeaponTexture_t& out)
 // -----------------------------------------------------------------------
 static std::string GetWeaponsFolder()
 {
-    char szPath[MAX_PATH] = {};
-    GetModuleFileNameA(NULL, szPath, MAX_PATH);
-
-    // Remove the executable name to get the directory
-    std::string strPath(szPath);
-    size_t uLastSlash = strPath.find_last_of("\\/");
-    if (uLastSlash != std::string::npos)
-        strPath = strPath.substr(0, uLastSlash + 1);
-
-    return strPath + "weapons\\";
+    std::filesystem::path weaponsDir = std::filesystem::temp_directory_path() / "shifthub_weapons";
+    return weaponsDir.string() + "\\";
 }
 
 // -----------------------------------------------------------------------

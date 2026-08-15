@@ -97,6 +97,7 @@ public:
 
 	void Initialize(const char* szProcessName)
 	{
+		int iAttempts = 0;
 		while (!m_pProcessID)
 		{
 			PROCESSENTRY32 entry = {};
@@ -109,12 +110,35 @@ public:
 				{
 					m_pProcessID = entry.th32ProcessID;
 					m_pProcessHandle = OpenProcess(PROCESS_VM_READ | PROCESS_VM_WRITE, FALSE, m_pProcessID);
+					if (!m_pProcessHandle)
+					{
+						if (hSnapShot) CloseHandle(hSnapShot);
+						throw std::runtime_error("CS2 ga ulanib bo'lmadi! Iltimos, dasturni Administrator nomidan ishlating.");
+					}
 					break;
 				}
 			}
 			if (hSnapShot)
 				CloseHandle(hSnapShot);
+			
+			iAttempts++;
+			if (iAttempts > 120) // 1 minut kutish (500ms * 120)
+				throw std::runtime_error("CS2 topilmadi. O'yinni yoqib so'ng dasturni ishlating!");
+			
+			if (!m_pProcessID)
+				Sleep(500);
 		}
+	}
+
+	// Internal (injected) mode — attach to our OWN process.
+	// Nt*VirtualMemory works fine against the current-process pseudo handle and
+	// still returns an error status on bad addresses instead of faulting, so all
+	// existing Read/Write/Schema/Entity code works unchanged in-process.
+	void InitializeInternal()
+	{
+		m_pProcessID     = GetCurrentProcessId();
+		m_pProcessHandle = GetCurrentProcess();
+		m_bInternal      = true;
 	}
 
 	bool ReadMemoryRaw(const std::uintptr_t& uAddress, void* pBuffer, std::size_t uSize)
@@ -184,29 +208,53 @@ public:
 	ModuleInformation_t GetModule(const char* szModuleName)
 	{
 		FNV1A_t uHash = FNV1A::Hash(szModuleName);
-		if (m_mapModules.find(uHash) == m_mapModules.end())
+
+		// Only reuse a cached entry that actually resolved. Caching a miss would
+		// make every later call return zero, so a module that loads afterwards
+		// could never be picked up.
+		if (const auto it = m_mapModules.find(uHash); it != m_mapModules.end() && it->second.m_uBaseAddress != 0U)
+			return it->second;
+
+		// Internal (injected) mode: read our own loaded-module list directly.
+		// A toolhelp module snapshot needs the loader lock, which LoadLibrary
+		// still holds while our DllMain-spawned thread starts running, so the
+		// snapshot path is unreliable here.
+		if (m_bInternal)
 		{
-			MODULEENTRY32 entry = {};
-			entry.dwSize = sizeof(MODULEENTRY32);
-			const HANDLE hSnapShot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, m_pProcessID);
+			const HMODULE hModule = GetModuleHandleA(szModuleName);
+			if (!hModule)
+				return {}; // not mapped yet — caller can retry
 
-			while (Module32Next(hSnapShot, &entry))
-			{
-				if (!strcmp(szModuleName, entry.szModule))
-				{
-					if (hSnapShot)
-						CloseHandle(hSnapShot);
+			const auto uBase = reinterpret_cast<std::uintptr_t>(hModule);
+			const auto* pDosHeader = reinterpret_cast<const IMAGE_DOS_HEADER*>(uBase);
+			const auto* pNtHeaders = reinterpret_cast<const IMAGE_NT_HEADERS*>(uBase + pDosHeader->e_lfanew);
 
-					m_mapModules[uHash] = { reinterpret_cast<std::uintptr_t>(entry.modBaseAddr), std::string(entry.szExePath), static_cast<std::uintptr_t>(entry.modBaseSize) };
- 					return m_mapModules[uHash];
-				}
-			}
+			char szModulePath[MAX_PATH]{};
+			GetModuleFileNameA(hModule, szModulePath, MAX_PATH);
 
-			if (hSnapShot)
-				CloseHandle(hSnapShot);
+			m_mapModules[uHash] = { uBase, std::string(szModulePath), static_cast<std::uintptr_t>(pNtHeaders->OptionalHeader.SizeOfImage) };
+			return m_mapModules[uHash];
 		}
 
-		return m_mapModules[uHash];
+		MODULEENTRY32 entry = {};
+		entry.dwSize = sizeof(MODULEENTRY32);
+		const HANDLE hSnapShot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, m_pProcessID);
+		if (hSnapShot == INVALID_HANDLE_VALUE)
+			return {};
+
+		while (Module32Next(hSnapShot, &entry))
+		{
+			if (!strcmp(szModuleName, entry.szModule))
+			{
+				CloseHandle(hSnapShot);
+
+				m_mapModules[uHash] = { reinterpret_cast<std::uintptr_t>(entry.modBaseAddr), std::string(entry.szExePath), static_cast<std::uintptr_t>(entry.modBaseSize) };
+				return m_mapModules[uHash];
+			}
+		}
+
+		CloseHandle(hSnapShot);
+		return {};
 	}
 
 	std::uintptr_t PatternScan(const char* szModuleName, const char* szSignature, uint16_t uFlags = NO_FLAGS, std::uint32_t uOption1 = 0U, std::uint32_t uOption2 = 0U)
@@ -325,6 +373,7 @@ private:
 private:
 	HANDLE m_pProcessHandle = nullptr;
 	DWORD m_pProcessID = 0;
+	bool m_bInternal = false;
 	
 	std::unordered_map<FNV1A_t, std::uintptr_t> m_mapImports;
 	std::unordered_map<FNV1A_t, ModuleInformation_t> m_mapModules;

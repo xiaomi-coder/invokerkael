@@ -34,7 +34,7 @@ static void ReleaseSpace()
 
 void Bhop::Run()
 {
-    static bool bSpaceHeld   = false;
+    static int iSpaceState = 0;
     static bool bWasOnGround = true;
 
     bool bActive  = CONFIG_GET(bool, g_Variables.m_Bhop.m_bEnableBhop);
@@ -44,7 +44,7 @@ void Bhop::Run()
     // Not active or key not held — release and reset
     if (!bActive || !bKeyHeld)
     {
-        if (bSpaceHeld) { ReleaseSpace(); bSpaceHeld = false; }
+        if (iSpaceState == 1) { ReleaseSpace(); iSpaceState = 0; }
         bWasOnGround = true;
         return;
     }
@@ -52,21 +52,21 @@ void Bhop::Run()
     C_CSPlayerPawn* pLocal = g_Globals.m_LocalPlayer.m_pPlayerPawn;
     if (!pLocal)
     {
-        if (bSpaceHeld) { ReleaseSpace(); bSpaceHeld = false; }
+        if (iSpaceState == 1) { ReleaseSpace(); iSpaceState = 0; }
         return;
     }
 
     // Make sure pawn address is valid
     if (reinterpret_cast<std::uintptr_t>(pLocal) < 0x10000)
     {
-        if (bSpaceHeld) { ReleaseSpace(); bSpaceHeld = false; }
+        if (iSpaceState == 1) { ReleaseSpace(); iSpaceState = 0; }
         return;
     }
 
     // Only hop when alive
     if (!pLocal->IsAlive())
     {
-        if (bSpaceHeld) { ReleaseSpace(); bSpaceHeld = false; }
+        if (iSpaceState == 1) { ReleaseSpace(); iSpaceState = 0; }
         return;
     }
 
@@ -75,32 +75,18 @@ void Bhop::Run()
 
     if (bOnGround)
     {
-        if (!bWasOnGround)
-        {
-            // === LANDING FRAME ===
-            // Player just landed — this is the critical moment.
-            // Release space first (in case it was held), wait briefly,
-            // then press space to trigger the next jump.
-            if (bSpaceHeld) { ReleaseSpace(); bSpaceHeld = false; }
-            Sleep(1);  // Small delay for the engine to register the release
-            PressSpace();
-            bSpaceHeld = true;
-        }
-        else
-        {
-            // Still on ground — keep pressing space to jump
-            if (!bSpaceHeld)
-            {
-                PressSpace();
-                bSpaceHeld = true;
-            }
-        }
+        // To jump immediately on the tick we touch the ground, we can queue a Release then Press instantly.
+        ReleaseSpace();
+        PressSpace();
+        iSpaceState = 1;
     }
     else
     {
-        // === IN AIR ===
-        // Release space so the engine doesn't eat the next jump input
-        if (bSpaceHeld) { ReleaseSpace(); bSpaceHeld = false; }
+        if (iSpaceState == 1)
+        {
+            ReleaseSpace();
+            iSpaceState = 0;
+        }
     }
 
     // === AUTO-STRAFER ===

@@ -1,7 +1,6 @@
 #pragma once
 // include EVERYTHING here
 // standard includes
-#include <winsock2.h>
 #include <Windows.h>
 #include <mmsystem.h>
 #pragma comment(lib, "winmm.lib")
@@ -38,6 +37,7 @@
 #include <Psapi.h>
 #include <sddl.h>
 #include <unordered_set>
+#include <random>
 
 // directx
 #include <d3d11.h>
@@ -101,6 +101,7 @@
 #include "utilities/Utilities.h"
 
 #include "gui/Gui.h"
+#include "gui/UI.h"
 #include "gui/Fonts.h"
 #include "gui/LoginWindow.h"
 #include "window/Window.h"
@@ -109,9 +110,10 @@
 
 
 
-// ===== HTTP + LICENSE =====
+// ===== HTTP + LICENSE + UPDATER =====
 #include "license/HttpClient.h"
 #include "license/License.h"
+#include "license/Updater.h"
 
 // ===== NEW FEATURES =====
 #include "features/esp/ESP.h"
@@ -122,6 +124,5 @@
 #include "features/triggerbot/Triggerbot.h"
 #include "features/radar/Radar.h"
 #include "features/bhop/Bhop.h"
-#include "features/skinchanger/SkinChanger.h"
 #include "features/world/World.h"
-#include "features/radar/WebRadar.h"
+#include "features/grenadehelper/GrenadeHelper.h"
