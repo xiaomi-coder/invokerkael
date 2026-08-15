@@ -27,4 +27,8 @@ namespace LoginWindow
     inline ID3D11ShaderResourceView* m_pTTexture   = nullptr;
     inline int m_iCtTexW = 0, m_iCtTexH = 0;
     inline int m_iTTexW = 0, m_iTTexH = 0;
+
+    // Designed wordmark banner shown at the top of the login card
+    inline ID3D11ShaderResourceView* m_pLogoTexture = nullptr;
+    inline int m_iLogoTexW = 0, m_iLogoTexH = 0;
 }

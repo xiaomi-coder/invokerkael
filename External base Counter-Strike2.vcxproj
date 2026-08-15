@@ -105,7 +105,8 @@
     <PostBuildEvent>
       <Command>copy /Y "$(ProjectDir)ct_image.png" "$(OutDir)ct_image.png"
 copy /Y "$(ProjectDir)ct_login.png" "$(OutDir)ct_login.png"
-copy /Y "$(ProjectDir)t_login.png" "$(OutDir)t_login.png"</Command>
+copy /Y "$(ProjectDir)t_login.png" "$(OutDir)t_login.png"
+copy /Y "$(ProjectDir)logo_banner.jpg" "$(OutDir)logo_banner.jpg"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>

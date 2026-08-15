@@ -165,8 +165,9 @@ bool LoginWindow::Create()
 
     ImGuiFreeType::BuildFontAtlas(io.Fonts, 0);
 
-    m_pCtTexture = LoadPortrait(m_pDevice, "ct_login.png", m_iCtTexW, m_iCtTexH);
-    m_pTTexture  = LoadPortrait(m_pDevice, "t_login.png",  m_iTTexW,  m_iTTexH);
+    m_pCtTexture   = LoadPortrait(m_pDevice, "ct_login.png",   m_iCtTexW,   m_iCtTexH);
+    m_pTTexture    = LoadPortrait(m_pDevice, "t_login.png",    m_iTTexW,    m_iTTexH);
+    m_pLogoTexture = LoadPortrait(m_pDevice, "logo_banner.jpg", m_iLogoTexW, m_iLogoTexH);
 
     m_bInitialized = true;
     return true;
@@ -338,36 +339,49 @@ bool LoginWindow::Run()
             DrawFaction(m_pCtTexture, m_iCtTexW, m_iCtTexH, true,  UI::COL_CYAN,    "SPETSNAZ // CT");
             DrawFaction(m_pTTexture,  m_iTTexW,  m_iTTexH,  false, UI::COL_MAGENTA, "TERRORCHI // T");
 
-            // --- logo mark ---
+            // --- wordmark banner (designed asset) or procedural fallback ---
+            if (m_pLogoTexture && m_iLogoTexW > 0 && m_iLogoTexH > 0)
             {
-                ImVec2 c(W * 0.5f, 128.f);
-                float p = 0.6f + 0.4f * UI::Pulse(2.f);
-                dl->AddNgon(c, 46.f, UI::Fade(UI::COL_CYAN, p), 6, 2.2f);
-                dl->AddNgon(c, 34.f, UI::Fade(UI::COL_MAGENTA, 0.45f), 6, 1.3f);
-                dl->AddNgon(c, 58.f + 5.f * UI::Pulse(1.4f), UI::Fade(UI::COL_CYAN, 0.13f), 6, 1.f);
-                UI::Icon(dl, c, 40.f, UI::ICON_BOLT, UI::Fade(UI::COL_CYAN, p));
+                float flBannerW = 340.f;
+                float flBannerH = flBannerW * (float)m_iLogoTexH / (float)m_iLogoTexW;
+                ImVec2 bmn((W - flBannerW) * 0.5f, 44.f);
+                ImVec2 bmx(bmn.x + flBannerW, bmn.y + flBannerH);
+                dl->AddImage((ImTextureID)m_pLogoTexture, bmn, bmx);
+            }
+            else
+            {
+                // --- logo mark ---
+                {
+                    ImVec2 c(W * 0.5f, 128.f);
+                    float p = 0.6f + 0.4f * UI::Pulse(2.f);
+                    dl->AddNgon(c, 46.f, UI::Fade(UI::COL_CYAN, p), 6, 2.2f);
+                    dl->AddNgon(c, 34.f, UI::Fade(UI::COL_MAGENTA, 0.45f), 6, 1.3f);
+                    dl->AddNgon(c, 58.f + 5.f * UI::Pulse(1.4f), UI::Fade(UI::COL_CYAN, 0.13f), 6, 1.f);
+                    UI::Icon(dl, c, 40.f, UI::ICON_BOLT, UI::Fade(UI::COL_CYAN, p));
+                }
+
+                // --- wordmark ---
+                {
+                    if (Fonts::Title) ImGui::PushFont(Fonts::Title);
+                    ImVec2 s1 = ImGui::CalcTextSize("KaeL");
+                    ImVec2 s2 = ImGui::CalcTextSize(" CS2");
+                    float x0 = (W - (s1.x + s2.x)) * 0.5f;
+                    dl->AddText(ImVec2(x0, 196.f), UI::COL_TEXT, "KaeL");
+                    dl->AddText(ImVec2(x0 + s1.x, 196.f), UI::COL_MAGENTA, " CS2");
+                    if (Fonts::Title) ImGui::PopFont();
+                }
             }
 
-            // --- wordmark ---
-            {
-                if (Fonts::Title) ImGui::PushFont(Fonts::Title);
-                ImVec2 s1 = ImGui::CalcTextSize("KaeL");
-                ImVec2 s2 = ImGui::CalcTextSize(" CS2");
-                float x0 = (W - (s1.x + s2.x)) * 0.5f;
-                dl->AddText(ImVec2(x0, 196.f), UI::COL_TEXT, "KaeL");
-                dl->AddText(ImVec2(x0 + s1.x, 196.f), UI::COL_MAGENTA, " CS2");
-                if (Fonts::Title) ImGui::PopFont();
-            }
             {
                 char szSub[96];
                 snprintf(szSub, sizeof(szSub), "EXTERNAL   //   v%s", SHIFTHUB_VERSION);
-                CenteredText(dl, W, 244.f, szSub, UI::COL_TEXT_FAINT, Fonts::Mono);
+                CenteredText(dl, W, 258.f, szSub, UI::COL_TEXT_FAINT, Fonts::Mono);
             }
 
-            UI::NeonLine(dl, ImVec2(40.f, 274.f), W - 80.f, UI::Fade(UI::COL_CYAN, 0.5f), 1.f);
+            UI::NeonLine(dl, ImVec2(40.f, 280.f), W - 80.f, UI::Fade(UI::COL_CYAN, 0.5f), 1.f);
 
             // --- hint ---
-            CenteredText(dl, W, 284.f, "Hisobingiz bilan tizimga kiring", UI::COL_TEXT_FAINT, Fonts::Small);
+            CenteredText(dl, W, 290.f, "Hisobingiz bilan tizimga kiring", UI::COL_TEXT_FAINT, Fonts::Small);
 
             // --- LOGIN FORM ---
             const float fInputW = 260.f, fInputX = (W - fInputW) * 0.5f;
@@ -738,8 +752,9 @@ void LoginWindow::Destroy()
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
-    if (m_pCtTexture) { m_pCtTexture->Release(); m_pCtTexture = nullptr; }
-    if (m_pTTexture)  { m_pTTexture->Release();  m_pTTexture  = nullptr; }
+    if (m_pCtTexture)   { m_pCtTexture->Release();   m_pCtTexture   = nullptr; }
+    if (m_pTTexture)    { m_pTTexture->Release();    m_pTTexture    = nullptr; }
+    if (m_pLogoTexture) { m_pLogoTexture->Release(); m_pLogoTexture = nullptr; }
     if (m_pRTV) { m_pRTV->Release(); m_pRTV = nullptr; }
     if (m_pSwapChain) { m_pSwapChain->Release(); m_pSwapChain = nullptr; }
     if (m_pContext) { m_pContext->Release(); m_pContext = nullptr; }

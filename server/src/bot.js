@@ -88,17 +88,21 @@ function clearFlow(telegramId) {
 }
 
 // -----------------------------------------------------------------------
-//  Auto-registration — every Telegram user gets a KaeL CS2 account the
-//  first time they open the bot, no separate "register" step.
+//  Registration — the user picks their own login and password (asked one
+//  at a time via the 'register' text flow below). Returns the account if
+//  it already exists; otherwise starts registration and returns null, so
+//  callers can bail out of whatever they were doing.
 // -----------------------------------------------------------------------
-async function ensureUser(ctx) {
-    let user = await licenses.getUserByTelegramId(ctx.from.id);
-    if (user) return { user, isNew: false };
+async function requireUser(ctx) {
+    const user = await licenses.getUserByTelegramId(ctx.from.id);
+    if (user) return user;
 
-    const username = `tg_${ctx.from.id}`;
-    const password = licenses.randomPassword();
-    user = await licenses.createUser({ username, password, telegramId: ctx.from.id });
-    return { user, isNew: true, password };
+    setFlow(ctx.from.id, 'register', 1);
+    await ctx.reply(
+        "Avval ro'yxatdan o'tishingiz kerak.\n\nLogin (username) tanlang:",
+        Markup.removeKeyboard()
+    );
+    return null;
 }
 
 async function sendHome(ctx) {
@@ -114,21 +118,12 @@ async function sendHome(ctx) {
         return;
     }
 
-    const { user, isNew, password } = await ensureUser(ctx);
-
-    if (isNew) {
-        await ctx.reply(
-            "KaeL CS2 ga xush kelibsiz!\n\n" +
-            "Sizga hisob yaratildi — dasturga kirish uchun shu ma'lumotlarni ishlating:\n\n" +
-            `Username: ${user.username}\n` +
-            `Parol: ${password}\n\n` +
-            "Buni saqlab qo'ying, keyin qayta ko'rsatilmaydi."
-        );
-    }
+    const user = await requireUser(ctx);
+    if (!user) return;
 
     await ctx.reply(
         `KaeL CS2\n\n` +
-        `Username: ${user.username}\n` +
+        `Login: ${user.username}\n` +
         `Balans: ${fmtSom(user.balance_som)}\n` +
         `Holat: ${fmtStatus(user)}`,
         userKeyboard
@@ -141,10 +136,11 @@ async function sendHome(ctx) {
 bot.start((ctx) => sendHome(ctx));
 
 bot.hears(BTN.PROFILE, async (ctx) => {
-    const { user } = await ensureUser(ctx);
+    const user = await requireUser(ctx);
+    if (!user) return;
     await ctx.reply(
         `👤 Profil\n\n` +
-        `Username: ${user.username}\n` +
+        `Login: ${user.username}\n` +
         `Balans: ${fmtSom(user.balance_som)}\n` +
         `Holat: ${fmtStatus(user)}\n` +
         `Ro'yxatdan o'tgan: ${new Date(user.created_at).toLocaleDateString('uz-UZ')}`,
@@ -153,6 +149,8 @@ bot.hears(BTN.PROFILE, async (ctx) => {
 });
 
 bot.hears(BTN.BUY, async (ctx) => {
+    const user = await requireUser(ctx);
+    if (!user) return;
     await ctx.reply('VIP muddatini tanlang:', buyMenu());
 });
 
@@ -162,7 +160,8 @@ bot.action(/^buy:(.+)$/, async (ctx) => {
     const plan = findPlan(key);
     if (!plan) return;
 
-    const { user } = await ensureUser(ctx);
+    const user = await requireUser(ctx);
+    if (!user) return;
     const result = await licenses.purchaseVip(user.id, key);
 
     if (result.ok) {
@@ -180,12 +179,15 @@ bot.action(/^buy:(.+)$/, async (ctx) => {
 });
 
 bot.hears(BTN.TOPUP, async (ctx) => {
+    const user = await requireUser(ctx);
+    if (!user) return;
     clearFlow(ctx.from.id);
     await ctx.reply("Qancha to'ldirmoqchisiz?", topupMenu());
 });
 
 async function requestTopup(ctx, amount) {
-    const { user } = await ensureUser(ctx);
+    const user = await requireUser(ctx);
+    if (!user) return;
     await licenses.createTopupRequest(user.id, ctx.from.id, amount);
 
     const uname = ctx.from.username ? `@${ctx.from.username}` : `id:${ctx.from.id}`;
@@ -220,6 +222,8 @@ bot.action('topup:custom', async (ctx) => {
 });
 
 bot.hears(BTN.CONTACT, async (ctx) => {
+    const user = await requireUser(ctx);
+    if (!user) return;
     setFlow(ctx.from.id, 'contact_admin', 1);
     await ctx.reply("Xabaringizni yozing — admin uni ko'radi va sizga javob beradi:", Markup.removeKeyboard());
 });
@@ -325,6 +329,38 @@ bot.on('text', async (ctx, next) => {
     if (!state) return next();
 
     switch (state.flow) {
+        case 'register': {
+            if (state.step === 1) {
+                const login = text;
+                if (login.length < 3)
+                    return ctx.reply("Login juda qisqa. Kamida 3 ta belgi kiriting:");
+                if (!/^[a-zA-Z0-9_]+$/.test(login))
+                    return ctx.reply("Login faqat lotin harflari, raqam va pastki chiziqdan iborat bo'lsin. Qaytadan kiriting:");
+
+                const existing = await licenses.getUserByUsername(login);
+                if (existing)
+                    return ctx.reply("Bu login band. Boshqa login kiriting:");
+
+                state.data.username = login;
+                state.step = 2;
+                return ctx.reply("Parolni kiriting (kamida 4 ta belgi):");
+            }
+            if (state.step === 2) {
+                const password = text;
+                clearFlow(ctx.from.id);
+                if (password.length < 4)
+                    return ctx.reply("Parol juda qisqa. Qaytadan /start bosing.", Markup.removeKeyboard());
+
+                await licenses.createUser({ username: state.data.username, password, telegramId: ctx.from.id });
+                return ctx.reply(
+                    `✅ Ro'yxatdan o'tdingiz!\n\nLogin: ${state.data.username}\n\n` +
+                    `Dasturga shu login va parol bilan kirishingiz mumkin.`,
+                    userKeyboard
+                );
+            }
+            return;
+        }
+
         case 'topup_custom': {
             clearFlow(ctx.from.id);
             const amount = parseInt(text.replace(/\D/g, ''), 10);
@@ -334,7 +370,8 @@ bot.on('text', async (ctx, next) => {
 
         case 'contact_admin': {
             clearFlow(ctx.from.id);
-            const { user } = await ensureUser(ctx);
+            const user = await requireUser(ctx);
+            if (!user) return;
             const uname = ctx.from.username ? `@${ctx.from.username}` : `id:${ctx.from.id}`;
             for (const adminId of ADMIN_IDS) {
                 try {
