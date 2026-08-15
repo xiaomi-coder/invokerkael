@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { pool } = require('./db');
 const { hashPassword } = require('./auth');
+const { findPlan } = require('./plans');
 
 // Whether a user's VIP grant is currently usable.
 function isActive(user) {
@@ -101,6 +102,85 @@ async function getStats() {
     return rows[0];
 }
 
+// -----------------------------------------------------------------------
+//  Balance
+// -----------------------------------------------------------------------
+async function addBalance(username, amount) {
+    const { rows } = await pool.query(
+        `UPDATE users SET balance_som = balance_som + $2 WHERE username = $1 RETURNING *`,
+        [username, amount]
+    );
+    return rows[0] || null;
+}
+
+async function createTopupRequest(userId, telegramId, amount) {
+    const { rows } = await pool.query(
+        `INSERT INTO balance_topups (user_id, telegram_id, amount_som) VALUES ($1, $2, $3) RETURNING *`,
+        [userId, telegramId, amount]
+    );
+    return rows[0];
+}
+
+// Called after an admin manually credits balance, so the oldest pending
+// request for that user stops showing up as outstanding.
+async function confirmOldestPendingTopup(userId) {
+    await pool.query(
+        `UPDATE balance_topups SET status = 'confirmed', confirmed_at = now()
+         WHERE id = (
+             SELECT id FROM balance_topups
+             WHERE user_id = $1 AND status = 'pending'
+             ORDER BY created_at ASC LIMIT 1
+         )`,
+        [userId]
+    );
+}
+
+// Atomically deducts the plan price from the user's balance and extends
+// their VIP. Returns { ok: true, user } or { ok: false, error }.
+async function purchaseVip(userId, planKey) {
+    const plan = findPlan(planKey);
+    if (!plan) return { ok: false, error: 'Noma\'lum reja' };
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        const { rows } = await client.query('SELECT * FROM users WHERE id = $1 FOR UPDATE', [userId]);
+        const user = rows[0];
+        if (!user) { await client.query('ROLLBACK'); return { ok: false, error: 'Hisob topilmadi' }; }
+        if (user.blocked) { await client.query('ROLLBACK'); return { ok: false, error: 'Hisob bloklangan' }; }
+        if (Number(user.balance_som) < plan.price) {
+            await client.query('ROLLBACK');
+            return { ok: false, error: 'insufficient_balance', needed: plan.price - Number(user.balance_som) };
+        }
+
+        const base = (user.expires_at && new Date(user.expires_at).getTime() > Date.now())
+            ? new Date(user.expires_at)
+            : new Date();
+        const expiresAt = new Date(base.getTime() + plan.days * 24 * 60 * 60 * 1000);
+
+        const upd = await client.query(
+            `UPDATE users SET balance_som = balance_som - $2, is_vip = TRUE, expires_at = $3
+             WHERE id = $1 RETURNING *`,
+            [userId, plan.price, expiresAt]
+        );
+
+        await client.query(
+            `INSERT INTO payments (user_id, telegram_id, provider, amount_tiyin, plan_days, status, paid_at)
+             VALUES ($1, $2, 'balance', $3, $4, 'paid', now())`,
+            [userId, user.telegram_id, plan.price * 100, plan.days]
+        );
+
+        await client.query('COMMIT');
+        return { ok: true, user: upd.rows[0], plan };
+    } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+    } finally {
+        client.release();
+    }
+}
+
 module.exports = {
     isActive,
     getUserByUsername,
@@ -114,4 +194,8 @@ module.exports = {
     touchHeartbeat,
     listUsers,
     getStats,
+    addBalance,
+    createTopupRequest,
+    confirmOldestPendingTopup,
+    purchaseVip,
 };
