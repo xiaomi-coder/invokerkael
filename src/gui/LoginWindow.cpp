@@ -1,5 +1,7 @@
 #include "../Includes.h"
 #include <json.hpp>
+#include <shellapi.h>
+#pragma comment(lib, "shell32.lib")
 using json = nlohmann::json;
 
 // =====================================================================
@@ -102,7 +104,7 @@ static ImFont* LoginFont(ImGuiIO& io, const char* const* paths, int n, float siz
 bool LoginWindow::Create()
 {
     if (m_bInitialized) return true;
-    int wndW = 960, wndH = 620;
+    int wndW = 960, wndH = 720;
     int scrW = GetSystemMetrics(SM_CXSCREEN), scrH = GetSystemMetrics(SM_CYSCREEN);
 
     m_wc = {};
@@ -238,6 +240,11 @@ bool LoginWindow::Run()
     bool bCS2Found = false;
     float flCS2CheckTimer = 0.f;
 
+    char szUsername[64] = {};
+    char szPassword[64] = {};
+    std::string strLoginError;
+    bool bShowRegisterInfo = false;
+
     bool bRunning = true;
     while (bRunning)
     {
@@ -359,61 +366,125 @@ bool LoginWindow::Run()
 
             UI::NeonLine(dl, ImVec2(40.f, 274.f), W - 80.f, UI::Fade(UI::COL_CYAN, 0.5f), 1.f);
 
-            // --- status chips ---
-            {
-                const char* c1 = "OFFLINE REJIM";
-                const char* c2 = "BARCHA FUNKSIYALAR OCHIQ";
-                float w1 = UI::ChipWidth(c1), w2 = UI::ChipWidth(c2);
-                float x  = (W - (w1 + w2 + 10.f)) * 0.5f;
-                UI::Chip(c1, UI::COL_TEXT_MUTE, ImVec2(x, 292.f));
-                UI::Chip(c2, UI::COL_GREEN, ImVec2(x + w1 + 10.f, 292.f));
-            }
+            // --- hint ---
+            CenteredText(dl, W, 284.f, "Hisobingiz bilan tizimga kiring", UI::COL_TEXT_FAINT, Fonts::Small);
 
-            // --- START ---
+            // --- LOGIN FORM ---
+            const float fInputW = 260.f, fInputX = (W - fInputW) * 0.5f;
+
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.07f, 0.09f, 0.14f, 1.f));
+
+            ImGui::SetCursorPos({ fInputX, 306.f });
+            ImGui::SetNextItemWidth(fInputW);
+            ImGui::InputTextWithHint("##kael_username", "Username", szUsername, sizeof(szUsername));
+
+            ImGui::SetCursorPos({ fInputX, 350.f });
+            ImGui::SetNextItemWidth(fInputW);
+            ImGui::InputTextWithHint("##kael_password", "Parol", szPassword, sizeof(szPassword), ImGuiInputTextFlags_Password);
+
+            ImGui::PopStyleColor();
+
+            if (!strLoginError.empty())
+                CenteredText(dl, W, 390.f, strLoginError.c_str(), UI::COL_RED, Fonts::Small);
+
+            // glow bar above the login button
             {
                 float glow = UI::Pulse(3.f);
-                dl->AddRectFilledMultiColor(ImVec2(fX, 348.f), ImVec2(fX + fW, 350.f),
+                dl->AddRectFilledMultiColor(ImVec2(fX, 404.f), ImVec2(fX + fW, 406.f),
                     UI::Fade(UI::COL_CYAN, 0.15f + 0.6f * glow), UI::Fade(UI::COL_MAGENTA, 0.15f + 0.6f * glow),
                     UI::Fade(UI::COL_MAGENTA, 0.15f + 0.6f * glow), UI::Fade(UI::COL_CYAN, 0.15f + 0.6f * glow));
             }
 
-            ImGui::SetCursorPos({ fX, 352.f });
-            if (UI::Button("S T A R T", { fW, 54.f }, UI::BTN_PRIMARY))
+            ImGui::SetCursorPos({ fX, 408.f });
+            if (UI::Button("K I R I S H", { fW, 44.f }, UI::BTN_PRIMARY))
             {
-                // Vaqtincha lokal sessiya — serverga so'rov yuborilmaydi
-                g_License.m_strUser   = "KAEL";
-                g_License.m_eTier     = ETier::PRO;          // hamma funksiya ochiq
-                g_License.m_strExpiry = "Cheksiz (LOCAL)";
-                g_License.m_strToken  = "LOCAL";
+                strLoginError.clear();
 
-                ePhase = EPhase::LOADING; nCur = 0;
-                for (int i = 0; i < nSteps; i++) { steps[i].prog = 0; steps[i].done = false; }
-                bCS2Found = false;
+                json jBody;
+                jBody["username"] = szUsername;
+                jBody["password"] = szPassword;
+                Http::Response resp = Http::Post(g_License.m_strApiUrl + "/api/auth/login", jBody.dump());
 
-                // === asosiy featurelarni avtomatik yoqamiz ===
-                CONFIG_GET(bool, g_Variables.m_PlayerVisuals.m_bEnableVisuals) = true;
-                CONFIG_GET_ARRAY(bool, g_Variables.m_PlayerVisuals.m_vecVisualsModifiers, VISUALS_IGNORE_TEAMMATES) = true;
-                CONFIG_GET(bool, g_Variables.m_PlayerVisuals.m_bDrawBox) = true;
-                CONFIG_GET(bool, g_Variables.m_PlayerVisuals.m_bDrawHealthBar) = true;
-                CONFIG_GET(bool, g_Variables.m_PlayerVisuals.m_bDrawWeapon) = true;
-                CONFIG_GET(bool, g_Variables.m_PlayerVisuals.m_bDrawHasC4) = true;
-                CONFIG_GET(bool, g_Variables.m_Misc.m_bSniperCrosshair) = true;
-                CONFIG_GET(bool, g_Variables.m_SpectatorList.m_bEnableSpectatorList) = true;
-                CONFIG_GET(bool, g_Variables.m_Misc.m_bAntiFlash) = true;
-                CONFIG_GET(bool, g_Variables.m_Misc.m_bC4Timer) = true;
-                CONFIG_GET(bool, g_Variables.m_Misc.m_bGrenadeWarning) = true;
-                CONFIG_GET(bool, g_Variables.m_Misc.m_bWatermark) = true;
+                bool bOk = false;
+                if (resp.success && !resp.body.empty())
+                {
+                    try
+                    {
+                        json jResp = json::parse(resp.body);
+                        g_License.m_strToken = jResp.value("token", "");
+                        g_License.m_strUser  = jResp["user"].value("username", szUsername);
 
-                // === MID / PRO featurelari ===
-                CONFIG_GET(bool, g_Variables.m_Bhop.m_bEnableBhop) = true;
-                CONFIG_GET(bool, g_Variables.m_TriggerBot.m_bEnableTriggerbot) = true;
-                CONFIG_GET(bool, g_Variables.m_AimBot.m_bEnableAimbot) = true;
-                CONFIG_GET(bool, g_Variables.m_PlayerGlow.m_bEnableGlow) = true;
+                        std::string strTier = jResp["user"].value("tier", "free");
+                        if (strTier == "pro")       g_License.m_eTier = ETier::PRO;
+                        else if (strTier == "mid")  g_License.m_eTier = ETier::MID;
+                        else                        g_License.m_eTier = ETier::LITE;
+
+                        g_License.m_strExpiry = jResp["user"].value("expires_at", "N/A");
+                        bOk = !g_License.m_strToken.empty();
+                    }
+                    catch (...) { strLoginError = "Server javobi noto'g'ri"; }
+                }
+                else
+                {
+                    try
+                    {
+                        json jErr = json::parse(resp.body);
+                        strLoginError = jErr.value("error", "Login xato");
+                    }
+                    catch (...) { strLoginError = "Serverga ulanib bo'lmadi"; }
+                }
+
+                if (bOk)
+                {
+                    ePhase = EPhase::LOADING; nCur = 0;
+                    for (int i = 0; i < nSteps; i++) { steps[i].prog = 0; steps[i].done = false; }
+                    bCS2Found = false;
+
+                    // === asosiy featurelarni avtomatik yoqamiz ===
+                    CONFIG_GET(bool, g_Variables.m_PlayerVisuals.m_bEnableVisuals) = true;
+                    CONFIG_GET_ARRAY(bool, g_Variables.m_PlayerVisuals.m_vecVisualsModifiers, VISUALS_IGNORE_TEAMMATES) = true;
+                    CONFIG_GET(bool, g_Variables.m_PlayerVisuals.m_bDrawBox) = true;
+                    CONFIG_GET(bool, g_Variables.m_PlayerVisuals.m_bDrawHealthBar) = true;
+                    CONFIG_GET(bool, g_Variables.m_PlayerVisuals.m_bDrawWeapon) = true;
+                    CONFIG_GET(bool, g_Variables.m_PlayerVisuals.m_bDrawHasC4) = true;
+                    CONFIG_GET(bool, g_Variables.m_Misc.m_bSniperCrosshair) = true;
+                    CONFIG_GET(bool, g_Variables.m_SpectatorList.m_bEnableSpectatorList) = true;
+                    CONFIG_GET(bool, g_Variables.m_Misc.m_bAntiFlash) = true;
+                    CONFIG_GET(bool, g_Variables.m_Misc.m_bC4Timer) = true;
+                    CONFIG_GET(bool, g_Variables.m_Misc.m_bGrenadeWarning) = true;
+                    CONFIG_GET(bool, g_Variables.m_Misc.m_bWatermark) = true;
+
+                    // === MID / PRO featurelari ===
+                    CONFIG_GET(bool, g_Variables.m_Bhop.m_bEnableBhop) = true;
+                    CONFIG_GET(bool, g_Variables.m_TriggerBot.m_bEnableTriggerbot) = true;
+                    CONFIG_GET(bool, g_Variables.m_AimBot.m_bEnableAimbot) = true;
+                    CONFIG_GET(bool, g_Variables.m_PlayerGlow.m_bEnableGlow) = true;
+                }
             }
 
-            CenteredText(dl, W, 424.f, "Bosing — CS2 avtomatik topiladi va dastur ishga tushadi",
-                UI::COL_TEXT_FAINT, Fonts::Small);
-            CenteredText(dl, W, 458.f, "Adminga bog'lanish:  @bakoev_71", UI::COL_TEXT_FAINT, Fonts::Small);
+            // --- register link ---
+            ImGui::SetCursorPos({ fX, 462.f });
+            if (UI::Button("Hisobingiz yo'qmi?  Ro'yxatdan o'tish", { fW, 32.f }, UI::BTN_GHOST))
+                bShowRegisterInfo = !bShowRegisterInfo;
+
+            if (bShowRegisterInfo)
+            {
+                ImVec2 mn(fX, 502.f), mx(fX + fW, 656.f);
+                dl->AddRectFilled(mn, mx, IM_COL32(11, 15, 23, 245), 5.f);
+                dl->AddRect(mn, mx, UI::Fade(UI::COL_CYAN, 0.5f), 5.f, 0, 1.f);
+                UI::Brackets(dl, ImVec2(mn.x + 1.f, mn.y + 1.f), ImVec2(mx.x - 1.f, mx.y - 1.f), UI::Fade(UI::COL_CYAN, 0.35f), 12.f, 1.2f);
+
+                CenteredText(dl, W, mn.y + 16.f, "RO'YXATDAN O'TISH", UI::COL_CYAN, Fonts::Default);
+                UI::NeonLine(dl, ImVec2(mn.x + 20.f, mn.y + 44.f), fW - 40.f, UI::Fade(UI::COL_CYAN, 0.35f), 1.f);
+
+                CenteredText(dl, W, mn.y + 58.f,  "1.  Telegram'da @kaelcs2bot ni oching", UI::COL_TEXT, Fonts::Default);
+                CenteredText(dl, W, mn.y + 84.f,  "2.  /start buyrug'ini bosing",           UI::COL_TEXT, Fonts::Default);
+                CenteredText(dl, W, mn.y + 110.f, "3.  Username va parol avtomatik beriladi", UI::COL_TEXT, Fonts::Default);
+
+                ImGui::SetCursorPos({ W * 0.5f - 90.f, mn.y + 138.f });
+                if (UI::Button("@kaelcs2bot ni ochish", { 180.f, 32.f }, UI::BTN_PRIMARY))
+                    ShellExecuteA(NULL, "open", "https://t.me/kaelcs2bot", NULL, NULL, SW_SHOWNORMAL);
+            }
 
             // --- footer ---
             CenteredText(dl, W, H - 52.f, "1HP_KAEL", UI::Fade(UI::COL_CYAN, 0.6f), Fonts::Mono);

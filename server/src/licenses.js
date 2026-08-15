@@ -181,6 +181,57 @@ async function purchaseVip(userId, planKey) {
     }
 }
 
+async function listPendingTopups(limit = 20) {
+    const { rows } = await pool.query(
+        `SELECT bt.*, u.username FROM balance_topups bt
+         JOIN users u ON u.id = bt.user_id
+         WHERE bt.status = 'pending'
+         ORDER BY bt.created_at ASC LIMIT $1`,
+        [limit]
+    );
+    return rows;
+}
+
+// Confirms one specific top-up request by id (used by the admin panel's
+// "Kutilayotgan to'lovlar" list) — credits exactly that request's amount.
+async function confirmTopupById(topupId) {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        const { rows } = await client.query(
+            `SELECT * FROM balance_topups WHERE id = $1 AND status = 'pending' FOR UPDATE`,
+            [topupId]
+        );
+        const topup = rows[0];
+        if (!topup) { await client.query('ROLLBACK'); return null; }
+
+        const upd = await client.query(
+            `UPDATE users SET balance_som = balance_som + $2 WHERE id = $1 RETURNING *`,
+            [topup.user_id, topup.amount_som]
+        );
+        await client.query(
+            `UPDATE balance_topups SET status = 'confirmed', confirmed_at = now() WHERE id = $1`,
+            [topupId]
+        );
+
+        await client.query('COMMIT');
+        return { user: upd.rows[0], topup };
+    } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+    } finally {
+        client.release();
+    }
+}
+
+async function listAllTelegramIds() {
+    const { rows } = await pool.query(
+        `SELECT telegram_id FROM users WHERE telegram_id IS NOT NULL AND blocked = FALSE`
+    );
+    return rows.map((r) => r.telegram_id);
+}
+
 module.exports = {
     isActive,
     getUserByUsername,
@@ -198,4 +249,7 @@ module.exports = {
     createTopupRequest,
     confirmOldestPendingTopup,
     purchaseVip,
+    listPendingTopups,
+    confirmTopupById,
+    listAllTelegramIds,
 };
