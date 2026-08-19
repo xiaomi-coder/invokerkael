@@ -113,14 +113,30 @@ app.post('/api/payment/webhook', express.json(), async (req, res) => {
 async function main() {
     await initSchema();
     const port = process.env.PORT || 3000;
-    app.listen(port, () => console.log(`[kaelserver] listening on :${port}`));
+    const httpServer = app.listen(port, () => console.log(`[kaelserver] listening on :${port}`));
 
     // Start the Telegram bot in the same process unless explicitly disabled.
+    let botInstance = null;
     if (process.env.BOT_TOKEN) {
+        botInstance = require('./bot').bot;
         require('./bot').launch();
     } else {
         console.log('[kaelserver] BOT_TOKEN not set — Telegram bot disabled');
     }
+
+    // Single place that owns process shutdown — stopping the bot alone
+    // (as Telegraf's own signal handlers do) never exits the process,
+    // since the HTTP server keeps the event loop alive. systemd relies on
+    // a real exit here to restart/stop us cleanly instead of escalating
+    // to SIGKILL.
+    const shutdown = (signal) => {
+        console.log(`[kaelserver] ${signal} received, shutting down...`);
+        if (botInstance) botInstance.stop(signal);
+        httpServer.close(() => process.exit(0));
+        setTimeout(() => process.exit(0), 3000).unref();
+    };
+    process.once('SIGINT', () => shutdown('SIGINT'));
+    process.once('SIGTERM', () => shutdown('SIGTERM'));
 }
 
 main().catch((err) => {

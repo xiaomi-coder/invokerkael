@@ -15,7 +15,7 @@ public:
     std::string m_strUser    = "Guest";
     std::string m_strExpiry  = "N/A";
     std::string m_strToken;
-    std::string m_strApiUrl  = "https://invokerkael-production.up.railway.app";
+    std::string m_strApiUrl  = "https://kaelcs2.aivibe.uz";
 
     // Login via console UI and authenticate with server
     void Load();

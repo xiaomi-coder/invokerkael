@@ -577,8 +577,8 @@ bot.command('addbalance', async (ctx) => {
 function launch() {
     bot.launch();
     console.log('[kaelserver] telegram bot started');
-    process.once('SIGINT', () => bot.stop('SIGINT'));
-    process.once('SIGTERM', () => bot.stop('SIGTERM'));
+    // Shutdown (SIGINT/SIGTERM) is handled centrally in server.js, which
+    // also owns the HTTP server and needs to be the one to process.exit().
 }
 
 module.exports = { bot, launch };
