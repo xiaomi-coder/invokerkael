@@ -8,7 +8,7 @@
 // VPS serveringizning IP yoki domenini qo'ying
 // Misol: "http://123.45.67.89/shifthub/version.json"
 // Misol: "https://update.shifthub.uz/version.json"
-#define SHIFTHUB_UPDATE_URL "http://YOUR_VPS_IP/shifthub/version.json"
+#define SHIFTHUB_UPDATE_URL "https://kaelcs2.aivibe.uz/updates/version.json"
 
 // game modules
 #define CLIENT_DLL X("client.dll")
