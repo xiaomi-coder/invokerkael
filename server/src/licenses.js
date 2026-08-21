@@ -225,6 +225,41 @@ async function confirmTopupById(topupId) {
     }
 }
 
+// ─── Paylov (avtomatik to'ldirish) ────────────────────────────────
+
+// Paylov checkout yaratilgach chaqiriladi: to'ldirish so'rovini 'pending'
+// holatida yozadi va Paylov buyurtmasiga bog'laydi. Tasdiqlash uchun
+// confirmTopupById() ishlatiladi — u atomik va ikki marta ishlamaydi.
+async function createPaylovTopup(userId, telegramId, amountSom, orderId, externalId, provider) {
+    const { rows } = await pool.query(
+        `INSERT INTO balance_topups (user_id, telegram_id, amount_som, paylov_order_id, external_id, provider)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+        [userId, telegramId, amountSom, orderId, externalId, provider]
+    );
+    return rows[0];
+}
+
+async function getTopupByOrderId(orderId) {
+    const { rows } = await pool.query(
+        `SELECT * FROM balance_topups WHERE paylov_order_id = $1 LIMIT 1`,
+        [orderId]
+    );
+    return rows[0] || null;
+}
+
+// Bot qayta ishga tushganda tugallanmagan Paylov to'lovlarini topish uchun.
+// Faqat oxirgi 24 soatnikini olamiz — eski tashlab ketilgan so'rovlarni emas.
+async function listPendingPaylovTopups(limit = 50) {
+    const { rows } = await pool.query(
+        `SELECT * FROM balance_topups
+         WHERE status = 'pending' AND paylov_order_id IS NOT NULL
+           AND created_at > now() - interval '24 hours'
+         ORDER BY created_at ASC LIMIT $1`,
+        [limit]
+    );
+    return rows;
+}
+
 async function listAllTelegramIds() {
     const { rows } = await pool.query(
         `SELECT telegram_id FROM users WHERE telegram_id IS NOT NULL AND blocked = FALSE`
@@ -233,6 +268,9 @@ async function listAllTelegramIds() {
 }
 
 module.exports = {
+    createPaylovTopup,
+    getTopupByOrderId,
+    listPendingPaylovTopups,
     isActive,
     getUserByUsername,
     getUserById,

@@ -1,6 +1,7 @@
 const { Telegraf, Markup } = require('telegraf');
 const licenses = require('./licenses');
 const { VIP_PLANS, TOPUP_PRESETS, findPlan, fmtSom } = require('./plans');
+const paylov = require('./paylov');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
@@ -185,9 +186,28 @@ bot.hears(BTN.TOPUP, async (ctx) => {
     await ctx.reply("Qancha to'ldirmoqchisiz?", topupMenu());
 });
 
+// Provayder tanlash klaviaturasi (summa callback ichida olib yuriladi)
+function providerMenu(amount) {
+    const rows = paylov.PROVIDERS.map((p) => [
+        Markup.button.callback(p.label, `payvia:${p.key}:${amount}`),
+    ]);
+    rows.push([Markup.button.callback('❌ Bekor qilish', 'paycancel')]);
+    return Markup.inlineKeyboard(rows);
+}
+
 async function requestTopup(ctx, amount) {
     const user = await requireUser(ctx);
     if (!user) return;
+
+    // Paylov sozlangan bo'lsa — avtomatik onlayn to'lov.
+    if (paylov.isConfigured()) {
+        return ctx.reply(
+            `To'ldirish summasi: ${fmtSom(amount)}\n\nTo'lov usulini tanlang:`,
+            providerMenu(amount)
+        );
+    }
+
+    // Paylov sozlanmagan — eski qo'lda tasdiqlash oqimi (o'zgarmagan).
     await licenses.createTopupRequest(user.id, ctx.from.id, amount);
 
     const uname = ctx.from.username ? `@${ctx.from.username}` : `id:${ctx.from.id}`;
@@ -208,6 +228,141 @@ async function requestTopup(ctx, amount) {
         `To'lovni amalga oshiring va admin tasdiqlashini kuting — balansingiz avtomatik yangilanadi.`,
         userKeyboard
     );
+}
+
+// ─── Paylov: to'lov yaratish, kuzatish, tasdiqlash ───────────────
+
+// Balansni bir marta qo'shadi. confirmTopupById atomik (FOR UPDATE) —
+// polling, "Tekshirish" tugmasi va startup bir vaqtda tegsa ham xavfsiz.
+async function creditPaidTopup(orderId) {
+    const topup = await licenses.getTopupByOrderId(orderId);
+    if (!topup || topup.status !== 'pending') return null;
+
+    const result = await licenses.confirmTopupById(topup.id);
+    if (!result) return null; // boshqa jarayon ulgurdi
+
+    if (result.topup.telegram_id) {
+        try {
+            await bot.telegram.sendMessage(
+                result.topup.telegram_id,
+                `✅ To'lov qabul qilindi!\n\n` +
+                `Qo'shildi: ${fmtSom(result.topup.amount_som)}\n` +
+                `Yangi balans: ${fmtSom(result.user.balance_som)}`,
+                userKeyboard
+            );
+        } catch { /* foydalanuvchi botni bloklagan bo'lishi mumkin */ }
+    }
+    for (const adminId of ADMIN_IDS) {
+        try {
+            await bot.telegram.sendMessage(
+                adminId,
+                `💰 Paylov to'lovi: ${result.user.username} — ${fmtSom(result.topup.amount_som)}`
+            );
+        } catch { /* admin bilan chat ochilmagan */ }
+    }
+    return result;
+}
+
+// Fon kuzatuvi: 2 daqiqa, har 5 soniyada. Bot qayta ishga tushsa bu
+// o'ladi — shuning uchun server.js startupda ham tekshiradi.
+function watchPayment(orderId, attempts = 24, delayMs = 5000) {
+    let n = 0;
+    const tick = async () => {
+        if (++n > attempts) return;
+        try {
+            if (await paylov.isPaid(orderId)) {
+                await creditPaidTopup(orderId);
+                return;
+            }
+        } catch (e) {
+            console.error('[paylov] watch xato:', e.message);
+        }
+        setTimeout(tick, delayMs);
+    };
+    setTimeout(tick, delayMs);
+}
+
+bot.action(/^payvia:([a-z_]+):(\d+)$/, async (ctx) => {
+    await ctx.answerCbQuery();
+    const provider = ctx.match[1];
+    const amount = Number(ctx.match[2]);
+    const user = await requireUser(ctx);
+    if (!user) return;
+
+    const externalId = `kael_${user.id}_${amount}_${Date.now()}`;
+    let order;
+    try {
+        order = await paylov.createCheckout(externalId, amount, provider);
+        // Yozuv havoladan OLDIN yaratiladi: aks holda user to'lab, biz uni
+        // hech qachon topa olmasdik (startup tekshiruvi ham ko'rmasdi).
+        if (order && order.checkout_url) {
+            await licenses.createPaylovTopup(user.id, ctx.from.id, amount, order.order_id, externalId, provider);
+        }
+    } catch (e) {
+        console.error('[paylov] checkout/DB xato:', e.message);
+        order = null;
+    }
+    if (!order || !order.checkout_url) {
+        return ctx.editMessageText(
+            "❌ To'lov havolasini yaratib bo'lmadi. Birozdan so'ng qayta urinib ko'ring " +
+            'yoki admin bilan bog\'laning.'
+        );
+    }
+
+    watchPayment(order.order_id);
+
+    await ctx.editMessageText(
+        `💳 To'lov: ${fmtSom(amount)}\n\n` +
+        `Quyidagi tugma orqali to'lang. To'lagach balansingiz avtomatik yangilanadi.`,
+        Markup.inlineKeyboard([
+            [Markup.button.url("💳 To'lash", order.checkout_url)],
+            [Markup.button.callback('🔄 Tekshirish', `paycheck:${order.order_id}`)],
+        ])
+    );
+});
+
+bot.action(/^paycheck:(\d+)$/, async (ctx) => {
+    const orderId = Number(ctx.match[1]);
+    const topup = await licenses.getTopupByOrderId(orderId);
+
+    if (topup && topup.status === 'confirmed') {
+        await ctx.answerCbQuery("To'lov allaqachon tasdiqlangan ✅", { show_alert: true });
+        return;
+    }
+    if (await paylov.isPaid(orderId)) {
+        await ctx.answerCbQuery('✅ To\'lov topildi!');
+        const result = await creditPaidTopup(orderId);
+        if (result) {
+            try { await ctx.editMessageText(`✅ To'lov qabul qilindi: ${fmtSom(result.topup.amount_som)}`); } catch {}
+        }
+        return;
+    }
+    await ctx.answerCbQuery("To'lov hali ko'rinmadi. To'lagan bo'lsangiz, biroz kuting va qayta bosing.", { show_alert: true });
+});
+
+bot.action('paycancel', async (ctx) => {
+    await ctx.answerCbQuery();
+    try { await ctx.editMessageText("Bekor qilindi."); } catch {}
+});
+
+// Bot qayta ishga tushganda tugallanmagan to'lovlarni tekshiradi —
+// busiz to'lagan odam balanssiz qolib ketardi.
+async function resumePendingPaylovTopups() {
+    if (!paylov.isConfigured()) return;
+    try {
+        const rows = await licenses.listPendingPaylovTopups();
+        if (!rows.length) return;
+        console.log(`[paylov] ${rows.length} ta tugallanmagan to'lov tekshirilmoqda`);
+        for (const row of rows) {
+            try {
+                if (await paylov.isPaid(row.paylov_order_id)) await creditPaidTopup(row.paylov_order_id);
+            } catch (e) {
+                console.error('[paylov] resume xato:', e.message);
+            }
+        }
+    } catch (e) {
+        console.error('[paylov] resumePendingPaylovTopups xato:', e.message);
+    }
 }
 
 bot.action(/^topup:(\d+)$/, async (ctx) => {
@@ -581,4 +736,4 @@ function launch() {
     // also owns the HTTP server and needs to be the one to process.exit().
 }
 
-module.exports = { bot, launch };
+module.exports = { bot, launch, resumePendingPaylovTopups };

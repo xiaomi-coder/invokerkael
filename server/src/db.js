@@ -58,6 +58,14 @@ CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status);
 CREATE INDEX IF NOT EXISTS idx_topups_status ON balance_topups(status);
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS balance_som BIGINT NOT NULL DEFAULT 0;
+
+-- Paylov (WLCM) orqali avtomatik to'ldirish uchun. Qo'lda tasdiqlash oqimi
+-- o'zgarmagan: bu ustunlar NULL bo'lsa, satr avvalgidek admin tomonidan
+-- tasdiqlanadigan so'rov bo'lib qolaveradi.
+ALTER TABLE balance_topups ADD COLUMN IF NOT EXISTS paylov_order_id BIGINT;
+ALTER TABLE balance_topups ADD COLUMN IF NOT EXISTS external_id TEXT;
+ALTER TABLE balance_topups ADD COLUMN IF NOT EXISTS provider TEXT;
+CREATE INDEX IF NOT EXISTS idx_topups_paylov_order ON balance_topups(paylov_order_id);
 `;
 
 async function initSchema() {

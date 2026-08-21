@@ -118,8 +118,13 @@ async function main() {
     // Start the Telegram bot in the same process unless explicitly disabled.
     let botInstance = null;
     if (process.env.BOT_TOKEN) {
-        botInstance = require('./bot').bot;
-        require('./bot').launch();
+        const botModule = require('./bot');
+        botInstance = botModule.bot;
+        botModule.launch();
+        // Bot o'chib-yonganda tugallanmagan Paylov to'lovlari yo'qolmasligi
+        // uchun: startupda ularni tekshirib, to'langanini yakunlaymiz.
+        botModule.resumePendingPaylovTopups().catch((e) =>
+            console.error('[paylov] startup resume xato:', e.message));
     } else {
         console.log('[kaelserver] BOT_TOKEN not set — Telegram bot disabled');
     }
