@@ -11,12 +11,24 @@ const API_SECRET = process.env.WLCM_API_SECRET || '';
 const RETURN_URL = process.env.PAYLOV_RETURN_URL || '';
 
 // Paylov qabul qiladigan provayderlar (kichik harflarda bo'lishi SHART)
-const PROVIDERS = [
+// DIQQAT: karta (Uzcard/Humo) uchun kalit 'paylov' — 'card' EMAS.
+// 'card' Paylov tomonidan qabul qilinmaydi (Provider is not configured).
+const ALL_PROVIDERS = [
     { key: 'payme', label: '💳 Payme' },
     { key: 'click', label: '🔵 Click' },
     { key: 'uzum', label: '🟣 Uzum' },
-    { key: 'card', label: '💳 Bank kartasi' },
+    { key: 'paylov', label: '💳 Karta (Uzcard/Humo)' },
 ];
+
+// Har bir provayder Octagram tomonidan alohida yoqiladi. Yoqilmaganini
+// ko'rsatsak — user bosadi va xato oladi. Shuning uchun ro'yxat .env dan
+// boshqariladi: PAYLOV_PROVIDERS=payme,click,uzum
+// Bo'sh qoldirilsa — hammasi ko'rsatiladi.
+const ENABLED = (process.env.PAYLOV_PROVIDERS || '')
+    .split(',').map((s) => s.trim()).filter(Boolean);
+const PROVIDERS = ENABLED.length
+    ? ALL_PROVIDERS.filter((p) => ENABLED.includes(p.key))
+    : ALL_PROVIDERS;
 
 function isConfigured() {
     return Boolean(API_KEY && API_SECRET);
@@ -129,4 +141,4 @@ async function healthcheck() {
     }
 }
 
-module.exports = { PROVIDERS, isConfigured, createCheckout, getOrderStatus, isPaid, healthcheck };
+module.exports = { PROVIDERS, ALL_PROVIDERS, isConfigured, createCheckout, getOrderStatus, isPaid, healthcheck };
