@@ -322,6 +322,9 @@ void RenderThread()
             // (C_M4A1, C_WeaponAWP...), shuning uchun mustaqil modul.
             LootESP::Render();
 
+            // ===== C4 TIMER =====
+            ESP::RenderC4Timer(vecEntities);
+
             // ===== 3D DAMAGE INDICATORS =====
             ESP::RenderDamageIndicators();
 
@@ -570,7 +573,7 @@ void TickThread()
                             int damage = it->second - (iHealth < 0 ? 0 : iHealth);
                             if (CONFIG_GET(bool, g_Variables.m_Misc.m_bDamageIndicator) && damage > 0 && damage <= 100)
                             {
-                                ESP::AddDamageIndicator(pPawn->GetEyePosition(), damage);
+                                ESP::AddDamageIndicator(pPawn->GetEyePosition(), damage, pPawn->m_iMaxHealth());
                             }
 
                             // Hit sound — o'q tegdi
@@ -583,7 +586,7 @@ void TickThread()
                             int damage = it->second;
                             if (CONFIG_GET(bool, g_Variables.m_Misc.m_bDamageIndicator) && damage > 0 && damage <= 100)
                             {
-                                ESP::AddDamageIndicator(pPawn->GetEyePosition(), damage);
+                                ESP::AddDamageIndicator(pPawn->GetEyePosition(), damage, pPawn->m_iMaxHealth());
                             }
 
                             // V2.0: Kill sound — dushman o'ldi!

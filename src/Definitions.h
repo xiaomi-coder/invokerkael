@@ -2,7 +2,7 @@
 
 // ===== SHIFTHUB VERSION =====
 // Yangi versiya chiqarganda shu raqamni oshiring
-#define SHIFTHUB_VERSION "2.0"
+#define SHIFTHUB_VERSION "2.5"
 
 // ===== AUTO-UPDATE URL =====
 // VPS serveringizning IP yoki domenini qo'ying

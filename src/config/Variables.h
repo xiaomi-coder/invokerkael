@@ -76,7 +76,7 @@ public:
 
 	struct PlayerVisualsVariables_t
 	{
-		CONFIG_ADD_VARIABLE(bool, m_bEnableVisuals, false);
+		CONFIG_ADD_VARIABLE(bool, m_bEnableVisuals, true);
 		CONFIG_ADD_VARIABLE_VECTOR(bool, EVisualsModifiers::VISUALS_MAX, m_vecVisualsModifiers, false);
 
 		CONFIG_ADD_VARIABLE(bool, m_bDrawBox,        true);
@@ -101,7 +101,7 @@ public:
 	// ================== PLAYER GLOW ====================
 	struct PlayerGlowVariables_t
 	{
-		CONFIG_ADD_VARIABLE(bool, m_bEnableGlow, false);
+		CONFIG_ADD_VARIABLE(bool, m_bEnableGlow, true);
 		CONFIG_ADD_VARIABLE(int,  m_iGlowType,   3);  // 0-none, 3=outer glow
 		CONFIG_ADD_VARIABLE(Color, m_colGlowEnemy,    Color(255, 255, 255, 255)); // White glow
 		CONFIG_ADD_VARIABLE(Color, m_colGlowTeam,     Color(50,  100, 255, 255)); // Blue glow
@@ -120,8 +120,8 @@ public:
 	// ================== MISC =========================
 	struct MiscVariables_t
 	{
-		CONFIG_ADD_VARIABLE(bool, m_bAntiFlash,       false);
-		CONFIG_ADD_VARIABLE(bool, m_bC4Timer,         false);
+		CONFIG_ADD_VARIABLE(bool, m_bAntiFlash,       true);
+		CONFIG_ADD_VARIABLE(bool, m_bC4Timer,         true);
 		CONFIG_ADD_VARIABLE(bool, m_bGrenadeWarning,  false);
 		CONFIG_ADD_VARIABLE(bool, m_bWatermark,       true);
 		CONFIG_ADD_VARIABLE(bool, m_bSniperCrosshair, false);

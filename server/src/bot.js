@@ -1,6 +1,8 @@
 const { Telegraf, Markup } = require('telegraf');
 const licenses = require('./licenses');
+const { verifyPassword } = require('./auth');
 const { VIP_PLANS, TOPUP_PRESETS, findPlan, fmtSom } = require('./plans');
+const paylov = require('./paylov');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
@@ -88,20 +90,49 @@ function clearFlow(telegramId) {
 }
 
 // -----------------------------------------------------------------------
-//  Registration — the user picks their own login and password (asked one
-//  at a time via the 'register' text flow below). Returns the account if
-//  it already exists; otherwise starts registration and returns null, so
-//  callers can bail out of whatever they were doing.
+//  Session — which account is "active" in this Telegram chat right now.
+//  Independent from users.telegram_id (the permanent binding set at
+//  registration): logging out only clears this in-memory entry, it never
+//  touches the DB, so the permanent binding is still there to auto-adopt
+//  next time — unless the user is explicitly LOGGED_OUT, in which case we
+//  ask them to log in or register instead of silently re-adopting it.
 // -----------------------------------------------------------------------
-async function requireUser(ctx) {
-    const user = await licenses.getUserByTelegramId(ctx.from.id);
-    if (user) return user;
+const LOGGED_OUT = Symbol('logged_out');
+const activeSession = new Map(); // telegramId -> userId | LOGGED_OUT
 
-    setFlow(ctx.from.id, 'register', 1);
-    await ctx.reply(
-        "Avval ro'yxatdan o'tishingiz kerak.\n\nLogin (username) tanlang:",
-        Markup.removeKeyboard()
+function showLoginOrRegister(ctx) {
+    return ctx.reply(
+        "KaeL CS2\n\nDavom etish uchun tanlang:",
+        Markup.inlineKeyboard([
+            [Markup.button.callback('🔑 Kirish', 'loginflow')],
+            [Markup.button.callback("📝 Ro'yxatdan o'tish", 'registerflow')],
+        ])
     );
+}
+
+// Returns the currently active account for this chat, or null after
+// showing a login/register prompt (callers should just `return` on null).
+async function requireUser(ctx) {
+    const entry = activeSession.get(ctx.from.id);
+
+    if (entry === LOGGED_OUT) {
+        await showLoginOrRegister(ctx);
+        return null;
+    }
+
+    if (entry) {
+        const user = await licenses.getUserById(entry);
+        if (user) return user;
+        activeSession.delete(ctx.from.id); // hisob o'chirilgan bo'lishi mumkin
+    }
+
+    const bound = await licenses.getUserByTelegramId(ctx.from.id);
+    if (bound) {
+        activeSession.set(ctx.from.id, bound.id);
+        return bound;
+    }
+
+    await showLoginOrRegister(ctx);
     return null;
 }
 
@@ -143,9 +174,43 @@ bot.hears(BTN.PROFILE, async (ctx) => {
         `Login: ${user.username}\n` +
         `Balans: ${fmtSom(user.balance_som)}\n` +
         `Holat: ${fmtStatus(user)}\n` +
-        `Ro'yxatdan o'tgan: ${new Date(user.created_at).toLocaleDateString('uz-UZ')}`,
-        userKeyboard
+        `Ro'yxatdan o'tgan: ${new Date(user.created_at).toLocaleDateString('uz-UZ')}\n\n` +
+        `Xavfsizlik uchun parol ko'rsatilmaydi — kerak bo'lsa tiklang.`,
+        Markup.inlineKeyboard([
+            [Markup.button.callback('🔑 Parolni tiklash', 'resetpw')],
+            [Markup.button.callback('🚪 Chiqish', 'logout')],
+        ])
     );
+});
+
+bot.action('logout', async (ctx) => {
+    await ctx.answerCbQuery();
+    activeSession.set(ctx.from.id, LOGGED_OUT);
+    clearFlow(ctx.from.id);
+    try { await ctx.editMessageReplyMarkup(); } catch { /* ignore */ }
+    await showLoginOrRegister(ctx);
+});
+
+bot.action('resetpw', async (ctx) => {
+    await ctx.answerCbQuery();
+    const user = await requireUser(ctx);
+    if (!user) return;
+    setFlow(ctx.from.id, 'reset_password', 1);
+    await ctx.reply("Yangi parolingizni kiriting (kamida 4 ta belgi):", Markup.removeKeyboard());
+});
+
+bot.action('loginflow', async (ctx) => {
+    await ctx.answerCbQuery();
+    setFlow(ctx.from.id, 'login', 1);
+    try { await ctx.editMessageReplyMarkup(); } catch { /* ignore */ }
+    await ctx.reply('Login (username) kiriting:', Markup.removeKeyboard());
+});
+
+bot.action('registerflow', async (ctx) => {
+    await ctx.answerCbQuery();
+    setFlow(ctx.from.id, 'register', 1);
+    try { await ctx.editMessageReplyMarkup(); } catch { /* ignore */ }
+    await ctx.reply("Login (username) tanlang:", Markup.removeKeyboard());
 });
 
 bot.hears(BTN.BUY, async (ctx) => {
@@ -185,9 +250,28 @@ bot.hears(BTN.TOPUP, async (ctx) => {
     await ctx.reply("Qancha to'ldirmoqchisiz?", topupMenu());
 });
 
+// Provayder tanlash klaviaturasi (summa callback ichida olib yuriladi)
+function providerMenu(amount) {
+    const rows = paylov.PROVIDERS.map((p) => [
+        Markup.button.callback(p.label, `payvia:${p.key}:${amount}`),
+    ]);
+    rows.push([Markup.button.callback('❌ Bekor qilish', 'paycancel')]);
+    return Markup.inlineKeyboard(rows);
+}
+
 async function requestTopup(ctx, amount) {
     const user = await requireUser(ctx);
     if (!user) return;
+
+    // Paylov sozlangan bo'lsa — avtomatik onlayn to'lov.
+    if (paylov.isConfigured()) {
+        return ctx.reply(
+            `To'ldirish summasi: ${fmtSom(amount)}\n\nTo'lov usulini tanlang:`,
+            providerMenu(amount)
+        );
+    }
+
+    // Paylov sozlanmagan — eski qo'lda tasdiqlash oqimi (o'zgarmagan).
     await licenses.createTopupRequest(user.id, ctx.from.id, amount);
 
     const uname = ctx.from.username ? `@${ctx.from.username}` : `id:${ctx.from.id}`;
@@ -208,6 +292,141 @@ async function requestTopup(ctx, amount) {
         `To'lovni amalga oshiring va admin tasdiqlashini kuting — balansingiz avtomatik yangilanadi.`,
         userKeyboard
     );
+}
+
+// ─── Paylov: to'lov yaratish, kuzatish, tasdiqlash ───────────────
+
+// Balansni bir marta qo'shadi. confirmTopupById atomik (FOR UPDATE) —
+// polling, "Tekshirish" tugmasi va startup bir vaqtda tegsa ham xavfsiz.
+async function creditPaidTopup(orderId) {
+    const topup = await licenses.getTopupByOrderId(orderId);
+    if (!topup || topup.status !== 'pending') return null;
+
+    const result = await licenses.confirmTopupById(topup.id);
+    if (!result) return null; // boshqa jarayon ulgurdi
+
+    if (result.topup.telegram_id) {
+        try {
+            await bot.telegram.sendMessage(
+                result.topup.telegram_id,
+                `✅ To'lov qabul qilindi!\n\n` +
+                `Qo'shildi: ${fmtSom(result.topup.amount_som)}\n` +
+                `Yangi balans: ${fmtSom(result.user.balance_som)}`,
+                userKeyboard
+            );
+        } catch { /* foydalanuvchi botni bloklagan bo'lishi mumkin */ }
+    }
+    for (const adminId of ADMIN_IDS) {
+        try {
+            await bot.telegram.sendMessage(
+                adminId,
+                `💰 Paylov to'lovi: ${result.user.username} — ${fmtSom(result.topup.amount_som)}`
+            );
+        } catch { /* admin bilan chat ochilmagan */ }
+    }
+    return result;
+}
+
+// Fon kuzatuvi: 2 daqiqa, har 5 soniyada. Bot qayta ishga tushsa bu
+// o'ladi — shuning uchun server.js startupda ham tekshiradi.
+function watchPayment(orderId, attempts = 24, delayMs = 5000) {
+    let n = 0;
+    const tick = async () => {
+        if (++n > attempts) return;
+        try {
+            if (await paylov.isPaid(orderId)) {
+                await creditPaidTopup(orderId);
+                return;
+            }
+        } catch (e) {
+            console.error('[paylov] watch xato:', e.message);
+        }
+        setTimeout(tick, delayMs);
+    };
+    setTimeout(tick, delayMs);
+}
+
+bot.action(/^payvia:([a-z_]+):(\d+)$/, async (ctx) => {
+    await ctx.answerCbQuery();
+    const provider = ctx.match[1];
+    const amount = Number(ctx.match[2]);
+    const user = await requireUser(ctx);
+    if (!user) return;
+
+    const externalId = `kael_${user.id}_${amount}_${Date.now()}`;
+    let order;
+    try {
+        order = await paylov.createCheckout(externalId, amount, provider);
+        // Yozuv havoladan OLDIN yaratiladi: aks holda user to'lab, biz uni
+        // hech qachon topa olmasdik (startup tekshiruvi ham ko'rmasdi).
+        if (order && order.checkout_url) {
+            await licenses.createPaylovTopup(user.id, ctx.from.id, amount, order.order_id, externalId, provider);
+        }
+    } catch (e) {
+        console.error('[paylov] checkout/DB xato:', e.message);
+        order = null;
+    }
+    if (!order || !order.checkout_url) {
+        return ctx.editMessageText(
+            "❌ To'lov havolasini yaratib bo'lmadi. Birozdan so'ng qayta urinib ko'ring " +
+            'yoki admin bilan bog\'laning.'
+        );
+    }
+
+    watchPayment(order.order_id);
+
+    await ctx.editMessageText(
+        `💳 To'lov: ${fmtSom(amount)}\n\n` +
+        `Quyidagi tugma orqali to'lang. To'lagach balansingiz avtomatik yangilanadi.`,
+        Markup.inlineKeyboard([
+            [Markup.button.url("💳 To'lash", order.checkout_url)],
+            [Markup.button.callback('🔄 Tekshirish', `paycheck:${order.order_id}`)],
+        ])
+    );
+});
+
+bot.action(/^paycheck:(\d+)$/, async (ctx) => {
+    const orderId = Number(ctx.match[1]);
+    const topup = await licenses.getTopupByOrderId(orderId);
+
+    if (topup && topup.status === 'confirmed') {
+        await ctx.answerCbQuery("To'lov allaqachon tasdiqlangan ✅", { show_alert: true });
+        return;
+    }
+    if (await paylov.isPaid(orderId)) {
+        await ctx.answerCbQuery('✅ To\'lov topildi!');
+        const result = await creditPaidTopup(orderId);
+        if (result) {
+            try { await ctx.editMessageText(`✅ To'lov qabul qilindi: ${fmtSom(result.topup.amount_som)}`); } catch {}
+        }
+        return;
+    }
+    await ctx.answerCbQuery("To'lov hali ko'rinmadi. To'lagan bo'lsangiz, biroz kuting va qayta bosing.", { show_alert: true });
+});
+
+bot.action('paycancel', async (ctx) => {
+    await ctx.answerCbQuery();
+    try { await ctx.editMessageText("Bekor qilindi."); } catch {}
+});
+
+// Bot qayta ishga tushganda tugallanmagan to'lovlarni tekshiradi —
+// busiz to'lagan odam balanssiz qolib ketardi.
+async function resumePendingPaylovTopups() {
+    if (!paylov.isConfigured()) return;
+    try {
+        const rows = await licenses.listPendingPaylovTopups();
+        if (!rows.length) return;
+        console.log(`[paylov] ${rows.length} ta tugallanmagan to'lov tekshirilmoqda`);
+        for (const row of rows) {
+            try {
+                if (await paylov.isPaid(row.paylov_order_id)) await creditPaidTopup(row.paylov_order_id);
+            } catch (e) {
+                console.error('[paylov] resume xato:', e.message);
+            }
+        }
+    } catch (e) {
+        console.error('[paylov] resumePendingPaylovTopups xato:', e.message);
+    }
 }
 
 bot.action(/^topup:(\d+)$/, async (ctx) => {
@@ -351,14 +570,61 @@ bot.on('text', async (ctx, next) => {
                 if (password.length < 4)
                     return ctx.reply("Parol juda qisqa. Qaytadan /start bosing.", Markup.removeKeyboard());
 
-                await licenses.createUser({ username: state.data.username, password, telegramId: ctx.from.id });
+                // Bu Telegram ID allaqachon boshqa hisobga bog'langan bo'lsa,
+                // yangi hisobni telegram_id siz yaratamiz — chunki u ustun
+                // UNIQUE. Yangi hisobga faqat "Kirish" orqali kirish mumkin.
+                const boundToOther = await licenses.getUserByTelegramId(ctx.from.id);
+                const newUser = await licenses.createUser({
+                    username: state.data.username,
+                    password,
+                    telegramId: boundToOther ? null : ctx.from.id,
+                });
+                activeSession.set(ctx.from.id, newUser.id);
+
                 return ctx.reply(
                     `✅ Ro'yxatdan o'tdingiz!\n\nLogin: ${state.data.username}\n\n` +
-                    `Dasturga shu login va parol bilan kirishingiz mumkin.`,
+                    `Dasturga shu login va parol bilan kirishingiz mumkin.` +
+                    (boundToOther
+                        ? `\n\n⚠️ Bu hisobga botda qaytadan kirish uchun Profil → "🚪 Chiqish", so'ng "🔑 Kirish" tugmasidan foydalaning.`
+                        : ''),
                     userKeyboard
                 );
             }
             return;
+        }
+
+        case 'login': {
+            if (state.step === 1) {
+                const login = text;
+                const user = await licenses.getUserByUsername(login);
+                if (!user)
+                    return ctx.reply("Bunday login topilmadi. Qaytadan kiriting, yoki /start bosing:");
+                state.data.username = login;
+                state.step = 2;
+                return ctx.reply('Parolni kiriting:');
+            }
+            if (state.step === 2) {
+                clearFlow(ctx.from.id);
+                const user = await licenses.getUserByUsername(state.data.username);
+                const ok = user && (await verifyPassword(text, user.password_hash));
+                if (!ok)
+                    return ctx.reply("Login yoki parol noto'g'ri. Qaytadan /start bosing.", Markup.removeKeyboard());
+
+                activeSession.set(ctx.from.id, user.id);
+                return ctx.reply(`✅ Kirdingiz: ${user.username}`, userKeyboard);
+            }
+            return;
+        }
+
+        case 'reset_password': {
+            clearFlow(ctx.from.id);
+            const user = await requireUser(ctx);
+            if (!user) return;
+            if (text.length < 4)
+                return ctx.reply("Parol juda qisqa. Qaytadan urinib ko'ring: Profil → \"🔑 Parolni tiklash\".", userKeyboard);
+
+            await licenses.setPassword(user.username, text);
+            return ctx.reply("✅ Parolingiz yangilandi. Dasturga shu login va yangi parol bilan kiring.", userKeyboard);
         }
 
         case 'topup_custom': {
@@ -581,4 +847,4 @@ function launch() {
     // also owns the HTTP server and needs to be the one to process.exit().
 }
 
-module.exports = { bot, launch };
+module.exports = { bot, launch, resumePendingPaylovTopups };

@@ -1534,47 +1534,10 @@ static void PageSystem()
         UI::Gap(6.f);
         UI::Toggle(X("Ekran yozishdan yashirish"), &CONFIG_GET(bool, g_Variables.m_Gui.m_bExcludeFromDesktopCapture));
         UI::Hint(X("Stream / screenshot dasturlariga menyu ko'rinmaydi."));
-    }
-    UI::EndCard();
 
-    UI::BeginCard(X("QO'SHIMCHA  ·  UTILITY"));
-    {
+        UI::Gap(6.f);
         UI::Toggle(X("Avtomatik qabul qilish (auto-accept)"), &CONFIG_GET(bool, g_Variables.m_Misc.m_bAutoAccept));
         UI::Hint(X("Match topilganda orqa fonda markaziy tugmani bosadi."));
-
-        UI::Gap(5.f);
-        UI::Toggle(X("Flash himoya"), &CONFIG_GET(bool, g_Variables.m_Misc.m_bAntiFlash));
-        UI::Col2();
-        UI::Toggle(X("Watermark"), &CONFIG_GET(bool, g_Variables.m_Misc.m_bWatermark));
-
-        UI::Toggle(X("C4 timer + damage"), &CONFIG_GET(bool, g_Variables.m_Misc.m_bC4Timer));
-        UI::Col2();
-        UI::Toggle(X("Granata xavfi"), &CONFIG_GET(bool, g_Variables.m_Misc.m_bGrenadeWarning));
-
-        UI::Toggle(X("Sniper crosshair"), &CONFIG_GET(bool, g_Variables.m_Misc.m_bSniperCrosshair));
-        UI::Col2();
-        UI::Toggle(X("Tomosha qiluvchilar"), &CONFIG_GET(bool, g_Variables.m_SpectatorList.m_bEnableSpectatorList));
-
-        UI::Hint(X("Sniper crosshair: AWP / SSG08 scope ochilmagan holatda markazni chizadi."));
-    }
-    UI::EndCard();
-
-    UI::BeginCard(X("OVOZ  ·  AUDIO"));
-    {
-        UI::Toggle(X("Hit sound (tegish ovozi)"), &CONFIG_GET(bool, g_Variables.m_Misc.m_bHitSound));
-        UI::Col2();
-        UI::Toggle(X("Kill sound (o'ldirish ovozi)"), &CONFIG_GET(bool, g_Variables.m_Misc.m_bKillSound));
-
-        UI::Gap(4.f);
-        UI::SliderF(X("Ovoz balandligi"), "##sndvol", &CONFIG_GET(float, g_Variables.m_Misc.m_flSoundVolume), 0.f, 100.f, "%.0f%%", 240.f);
-        UI::Hint(X("hit_sound.wav va kill_sound.wav fayllarini exe yoniga qo'ying."));
-
-        UI::Gap(4.f);
-        if (UI::Button(X("TEST HIT"), ImVec2(120.f, 0.f), UI::BTN_SUCCESS))
-            PlaySoundA("C:\\Windows\\Media\\Windows Default.wav", NULL, SND_ASYNC | SND_FILENAME);
-        ImGui::SameLine(0.f, 8.f);
-        if (UI::Button(X("TEST KILL"), ImVec2(120.f, 0.f), UI::BTN_SUCCESS))
-            PlaySoundA("C:\\Windows\\Media\\Windows Default.wav", NULL, SND_ASYNC | SND_FILENAME);
     }
     UI::EndCard();
 
@@ -1666,6 +1629,49 @@ static void PageSystem()
         UI::Gap(5.f);
         if (UI::Button(X("QAYTA TEKSHIRISH"), ImVec2(180.f, 0.f)))
             g_Updater.Recheck();
+    }
+    UI::EndCard();
+}
+
+// =======================================================================
+//  PAGE :: QO'SHIMCHA  (o'yin ichi ogohlantirishlar — sozlamalardan alohida)
+// =======================================================================
+static void PageMisc()
+{
+    UI::BeginCard(X("O'YIN OGOHLANTIRISHLARI  ·  GAME ALERTS"));
+    {
+        UI::Toggle(X("Flash himoya"), &CONFIG_GET(bool, g_Variables.m_Misc.m_bAntiFlash));
+        UI::Col2();
+        UI::Toggle(X("Watermark"), &CONFIG_GET(bool, g_Variables.m_Misc.m_bWatermark));
+
+        UI::Toggle(X("C4 timer + damage"), &CONFIG_GET(bool, g_Variables.m_Misc.m_bC4Timer));
+        UI::Col2();
+        UI::Toggle(X("Granata xavfi"), &CONFIG_GET(bool, g_Variables.m_Misc.m_bGrenadeWarning));
+
+        UI::Toggle(X("Sniper crosshair"), &CONFIG_GET(bool, g_Variables.m_Misc.m_bSniperCrosshair));
+        UI::Col2();
+        UI::Toggle(X("Tomosha qiluvchilar"), &CONFIG_GET(bool, g_Variables.m_SpectatorList.m_bEnableSpectatorList));
+
+        UI::Hint(X("Sniper crosshair: AWP / SSG08 scope ochilmagan holatda markazni chizadi."));
+    }
+    UI::EndCard();
+
+    UI::BeginCard(X("OVOZ  ·  AUDIO"));
+    {
+        UI::Toggle(X("Hit sound (tegish ovozi)"), &CONFIG_GET(bool, g_Variables.m_Misc.m_bHitSound));
+        UI::Col2();
+        UI::Toggle(X("Kill sound (o'ldirish ovozi)"), &CONFIG_GET(bool, g_Variables.m_Misc.m_bKillSound));
+
+        UI::Gap(4.f);
+        UI::SliderF(X("Ovoz balandligi"), "##sndvol", &CONFIG_GET(float, g_Variables.m_Misc.m_flSoundVolume), 0.f, 100.f, "%.0f%%", 240.f);
+        UI::Hint(X("hit_sound.wav va kill_sound.wav fayllarini exe yoniga qo'ying."));
+
+        UI::Gap(4.f);
+        if (UI::Button(X("TEST HIT"), ImVec2(120.f, 0.f), UI::BTN_SUCCESS))
+            PlaySoundA("C:\\Windows\\Media\\Windows Default.wav", NULL, SND_ASYNC | SND_FILENAME);
+        ImGui::SameLine(0.f, 8.f);
+        if (UI::Button(X("TEST KILL"), ImVec2(120.f, 0.f), UI::BTN_SUCCESS))
+            PlaySoundA("C:\\Windows\\Media\\Windows Default.wav", NULL, SND_ASYNC | SND_FILENAME);
     }
     UI::EndCard();
 }
@@ -1767,6 +1773,7 @@ void Gui::Render()
         { "RADAR",    UI::ICON_RADAR,     &PageRadar,     ETier::LITE },
         { "INVENTAR", UI::ICON_CASE,      &PageInventory, ETier::LITE },
         { "KONFIG",   UI::ICON_DISK,      &PageConfigs,   ETier::LITE },
+        { "QO'SHIMCHA", UI::ICON_GRENADE, &PageMisc,      ETier::LITE },
         { "TIZIM",    UI::ICON_GEAR,      &PageSystem,    ETier::LITE },
     };
     static const int kNavCount = IM_ARRAYSIZE(kNav);

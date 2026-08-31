@@ -171,9 +171,12 @@ static Color GetWeaponColor(const std::string& w)
     return Color(200, 200, 100, 230);
 }
 
-void ESP::DrawWeapon(const ImVec2& vecMin, const ImVec2& vecMax, const std::string& szWeapon)
+// flStartY: birinchi bo'sh joy — chaqiruvchi elementlar bir-birining ustiga
+// tushmasin deb ketma-ket joylashtiradi. Qaytadi: shu elementdan keyingi
+// bo'sh Y (keyingi elementga shuni flStartY qilib berish kerak).
+float ESP::DrawWeapon(const ImVec2& vecMin, const ImVec2& vecMax, const std::string& szWeapon, float flStartY)
 {
-    if (szWeapon.empty()) return;
+    if (szWeapon.empty()) return flStartY;
 
     // Try to draw weapon icon instead of text
     if (WeaponIcons::HasIcon(szWeapon))
@@ -192,7 +195,7 @@ void ESP::DrawWeapon(const ImVec2& vecMin, const ImVec2& vecMax, const std::stri
             float flIconH = flIconW / flAspect;
 
             float cx = (vecMin.x + vecMax.x) * 0.5f;
-            float cy = vecMax.y + Fonts::ESP->FontSize + 4.f; // below HP number
+            float cy = flStartY;
 
             Color colWeapon = GetWeaponColor(szWeapon);
 
@@ -200,7 +203,7 @@ void ESP::DrawWeapon(const ImVec2& vecMin, const ImVec2& vecMax, const std::stri
                 ImVec2(cx - flIconW * 0.5f, cy),
                 ImVec2(cx + flIconW * 0.5f, cy + flIconH),
                 colWeapon);
-            return;
+            return cy + flIconH + 2.f;
         }
     }
 
@@ -212,27 +215,30 @@ void ESP::DrawWeapon(const ImVec2& vecMin, const ImVec2& vecMax, const std::stri
 
     ImVec2 textSize = Fonts::ESP->CalcTextSizeA(Fonts::ESP->FontSize, FLT_MAX, 0.f, szDisplay.c_str());
     float  cx = (vecMin.x + vecMax.x) * 0.5f - textSize.x * 0.5f;
-    float  cy = vecMax.y + 2.f;
+    float  cy = flStartY;
 
     Draw::AddText(Fonts::ESP, Fonts::ESP->FontSize,
         ImVec2(cx, cy),
         szDisplay, colWeapon,
         DRAW_TEXT_DROPSHADOW, Color(0, 0, 0, 200));
+
+    return cy + textSize.y + 2.f;
 }
 
 // -----------------------------------------------------------------------
-// Draw: distance (below weapon name)
+// Draw: distance (stacks below whatever was drawn last — weapon icon/name)
 // -----------------------------------------------------------------------
-void ESP::DrawDistance(const ImVec2& vecMin, const ImVec2& vecMax, float flDist)
+float ESP::DrawDistance(const ImVec2& vecMin, const ImVec2& vecMax, float flDist, float flStartY)
 {
     char szDist[16];
     snprintf(szDist, sizeof(szDist), "%.0fm", flDist / 52.49f); // units → metres
     ImVec2 textSize = Fonts::ESP->CalcTextSizeA(Fonts::ESP->FontSize, FLT_MAX, 0.f, szDist);
     float  cx       = (vecMin.x + vecMax.x) * 0.5f - textSize.x * 0.5f;
     Draw::AddText(Fonts::ESP, Fonts::ESP->FontSize,
-        ImVec2(cx, vecMax.y + Fonts::ESP->FontSize + 3.f),
+        ImVec2(cx, flStartY),
         szDist, Color(180, 180, 180, 200),
         DRAW_TEXT_DROPSHADOW, Color(0, 0, 0, 180));
+    return flStartY + textSize.y + 2.f;
 }
 
 // -----------------------------------------------------------------------
@@ -309,6 +315,16 @@ void ESP::DrawSkeleton(C_CSPlayerPawn* pPawn, const Color& col)
 
         if (bParent.m_vecPosition.x == 0.f && bParent.m_vecPosition.y == 0.f) continue;
         if (bChild.m_vecPosition.x == 0.f && bChild.m_vecPosition.y == 0.f) continue;
+
+        // Bo'g'imlar orasidagi masofa inson tanasiga mos kelmasa (noto'g'ri
+        // bone index/eskirgan offset belgisi) — chiziqni chizmaymiz, aks
+        // holda ekranda tasodifiy "spagetti" chiziqlar paydo bo'ladi.
+        {
+            const float dx = bParent.m_vecPosition.x - bChild.m_vecPosition.x;
+            const float dy = bParent.m_vecPosition.y - bChild.m_vecPosition.y;
+            const float dz = bParent.m_vecPosition.z - bChild.m_vecPosition.z;
+            if ((dx * dx + dy * dy + dz * dz) > (45.f * 45.f)) continue;
+        }
 
         ImVec2 scrParent, scrChild;
         if (!Draw::WorldToScreen(bParent.m_vecPosition, scrParent)) continue;
@@ -480,18 +496,18 @@ void ESP::RenderPlayer(CCSPlayerController* pController, C_CSPlayerPawn* pPawn)
         DrawName(vecMin, vecMax, strName);
     }
 
-    // --- Weapon ---
+    // --- Weapon + Distance (ketma-ket joylashadi, bir-birining ustiga tushmaydi) ---
+    float flBelowY = vecMax.y + 2.f;
     if (CONFIG_GET(bool, g_Variables.m_PlayerVisuals.m_bDrawWeapon))
-        DrawWeapon(vecMin, vecMax, pPawn->m_strActiveWeaponName());
+        flBelowY = DrawWeapon(vecMin, vecMax, pPawn->m_strActiveWeaponName(), flBelowY);
 
-    // --- Distance ---
     if (CONFIG_GET(bool, g_Variables.m_PlayerVisuals.m_bDrawDistance))
     {
         C_CSPlayerPawn* pLocal = g_Globals.m_LocalPlayer.m_pPlayerPawn;
         if (pLocal)
         {
             float flDist = (pPawn->m_pGameSceneNode()->m_vecAbsOrigin() - pLocal->m_pGameSceneNode()->m_vecAbsOrigin()).Length();
-            DrawDistance(vecMin, vecMax, flDist);
+            flBelowY = DrawDistance(vecMin, vecMax, flDist, flBelowY);
         }
     }
 
@@ -581,7 +597,7 @@ void ESP::RenderGlowInfo(CCSPlayerController* pController, C_CSPlayerPawn* pPawn
     // Weapon
     std::string szWeapon = pPawn->m_strActiveWeaponName();
     if (!szWeapon.empty())
-        DrawWeapon(vecMin, ImVec2(vecMax.x, vecMax.y), szWeapon);
+        DrawWeapon(vecMin, ImVec2(vecMax.x, vecMax.y), szWeapon, vecMax.y + 2.f);
 }
 
 // -----------------------------------------------------------------------
@@ -788,12 +804,14 @@ void ESP::RenderGrenades(const std::vector<EntityObject_t>& vecEntities)
     }
 }
 
-void ESP::RenderWeapons(const std::vector<EntityObject_t>& vecEntities)
+// -----------------------------------------------------------------------
+// C4 timer: portlash vaqti + zararsizlantirish holati. Bombaning o'zi
+// (ENTITY_PLANTEDC4) LootESP dan mustaqil — bombani ko'rsatish faqat
+// "C4 timer" tugmasiga bog'liq, "yerdagi qurollar" tugmasiga emas.
+// -----------------------------------------------------------------------
+void ESP::RenderC4Timer(const std::vector<EntityObject_t>& vecEntities)
 {
-    bool bDrawWeapons = CONFIG_GET(bool, g_Variables.m_ESP.m_bDroppedWeapons);
-    bool bDrawC4Timer = CONFIG_GET(bool, g_Variables.m_Misc.m_bC4Timer);
-
-    if (!bDrawWeapons && !bDrawC4Timer)
+    if (!CONFIG_GET(bool, g_Variables.m_Misc.m_bC4Timer))
         return;
 
     static std::uintptr_t uGameSceneNodeOffset = 0;
@@ -811,137 +829,71 @@ void ESP::RenderWeapons(const std::vector<EntityObject_t>& vecEntities)
         bOffsetsResolved = true;
     }
 
-    if (uGameSceneNodeOffset == 0 || uOriginOffset == 0) return;
-
-    float flMaxDist = CONFIG_GET(float, g_Variables.m_ESP.m_flWeaponDistance);
+    if (uGameSceneNodeOffset == 0 || uOriginOffset == 0 || uC4Blow == 0) return;
 
     for (const EntityObject_t& obj : vecEntities)
     {
-        if (obj.m_pEntity == nullptr || (obj.m_eType != EEntityType::ENTITY_WEAPON && obj.m_eType != EEntityType::ENTITY_PLANTEDC4))
+        if (obj.m_pEntity == nullptr || obj.m_eType != EEntityType::ENTITY_PLANTEDC4)
             continue;
-
-        std::string sSchemaName = obj.m_pEntity->GetSchemaName();
-        bool bIsC4 = (sSchemaName == "C_C4" || sSchemaName == "weapon_c4");
-
-        if (obj.m_eType == EEntityType::ENTITY_WEAPON)
-        {
-            if (!bDrawWeapons && !bIsC4) continue;
-            if (bIsC4 && !bDrawWeapons && !bDrawC4Timer) continue;
-        }
 
         std::uintptr_t pEntityPtr = reinterpret_cast<std::uintptr_t>(obj.m_pEntity);
         std::uintptr_t uSceneNode = g_Memory.ReadMemory<std::uintptr_t>(pEntityPtr + uGameSceneNodeOffset);
+        if (uSceneNode < 0x1000) continue;
 
-        if (uSceneNode > 0x1000)
+        Vector vecOrigin = g_Memory.ReadMemory<Vector>(uSceneNode + uOriginOffset);
+        if (!std::isfinite(vecOrigin.x) || (vecOrigin.x == 0.f && vecOrigin.y == 0.f && vecOrigin.z == 0.f))
+            continue;
+
+        ImVec2 screenPos;
+        if (!Draw::WorldToScreen(vecOrigin, screenPos))
+            continue;
+
+        float flC4Blow = g_Memory.ReadMemory<float>(pEntityPtr + uC4Blow);
+        float flCur = g_Interfaces.m_GlobalVars.m_flCurrentTime;
+        float flTimeLeft = flC4Blow - flCur;
+        if (flTimeLeft < 0.f) flTimeLeft = 0.f;
+
+        bool bDefused = (uC4Defused != 0) && g_Memory.ReadMemory<bool>(pEntityPtr + uC4Defused);
+
+        char szTimer[64];
+        Color colTimer;
+        if (bDefused)
         {
-            Vector vecOrigin = g_Memory.ReadMemory<Vector>(uSceneNode + uOriginOffset);
-            
-            float dist = 0.f;
-            C_CSPlayerPawn* pLocalPawn = g_Globals.m_LocalPlayer.m_pPlayerPawn;
-            if (pLocalPawn) {
-                // Read local origin to check distance
-                std::uintptr_t uLocalScene = g_Memory.ReadMemory<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(pLocalPawn) + uGameSceneNodeOffset);
-                if (uLocalScene > 0x1000) {
-                    Vector vecLocalOrigin = g_Memory.ReadMemory<Vector>(uLocalScene + uOriginOffset);
-                    dist = vecLocalOrigin.DistTo(vecOrigin) * 0.0254f; // units to meters
-                    if (dist > flMaxDist) continue;
-                }
-            }
+            snprintf(szTimer, sizeof(szTimer), "C4 ZARARSIZLANTIRILDI");
+            colTimer = Color(100, 255, 100, 255);
+        }
+        else
+        {
+            snprintf(szTimer, sizeof(szTimer), "BOMBA - %.1f s", flTimeLeft);
+            if (flTimeLeft < 10.f && flTimeLeft > 0.f)
+                colTimer = ((int)(flCur * 10) % 2 == 0) ? Color(255, 255, 0, 255) : Color(255, 30, 30, 255);
+            else
+                colTimer = Color(255, 90, 90, 255);
+        }
 
-            ImVec2 screenPos;
-            if (Draw::WorldToScreen(vecOrigin, screenPos))
+        float flFontSize = Fonts::ESP->FontSize + 2.f;
+        ImVec2 textSize = Fonts::ESP->CalcTextSizeA(flFontSize, FLT_MAX, 0.f, szTimer);
+        float flTextY = screenPos.y - flFontSize - 4.f;
+        Draw::AddText(Fonts::ESP, flFontSize,
+            ImVec2(screenPos.x - textSize.x * 0.5f, flTextY),
+            szTimer, colTimer, DRAW_TEXT_DROPSHADOW, Color(0, 0, 0, 220));
+
+        // masofa
+        C_CSPlayerPawn* pLocal = g_Globals.m_LocalPlayer.m_pPlayerPawn;
+        if (pLocal)
+        {
+            std::uintptr_t uLocalNode = g_Memory.ReadMemory<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(pLocal) + uGameSceneNodeOffset);
+            if (uLocalNode > 0x1000)
             {
-                std::string sName = obj.m_pEntity->GetSchemaName();
-                if (obj.m_eType == EEntityType::ENTITY_PLANTEDC4) sName = "C4 PLANTED!";
+                Vector vecLocalOrigin = g_Memory.ReadMemory<Vector>(uLocalNode + uOriginOffset);
+                float flDist = vecLocalOrigin.DistTo(vecOrigin) * 0.0254f; // units -> metr
 
-                if (!sName.empty()) {
-                    if (sName.find("Weapon") != std::string::npos || sName == "C_DEagle" || sName == "C_AK47" || sName == "C_C4" || obj.m_eType == EEntityType::ENTITY_PLANTEDC4) {
-                        if (sName.find("C_Weapon") != std::string::npos) sName = sName.substr(8);
-                        else if (sName.find("CWeapon") != std::string::npos) sName = sName.substr(7);
-                        else if (sName.find("C_") != std::string::npos) sName = sName.substr(2);
-
-                        std::string sLowerName = sName;
-                        std::transform(sLowerName.begin(), sLowerName.end(), sLowerName.begin(), ::tolower);
-
-                        Color colWeapon = (sName == "C4" || obj.m_eType == EEntityType::ENTITY_PLANTEDC4) ? Color(255, 50, 50, 255) : GetWeaponColor(sLowerName);
-
-                        float flBottomY = screenPos.y; // Track bottom of drawn element
-
-                        bool bDrawnIcon = false;
-                        if (WeaponIcons::HasIcon(sLowerName))
-                        {
-                            ImTextureID tex = WeaponIcons::GetIcon(sLowerName);
-                            if (tex)
-                            {
-                                int iTexW = 0, iTexH = 0;
-                                WeaponIcons::GetIconSize(sLowerName, iTexW, iTexH);
-                                float flAspect = (iTexH > 0) ? (float)iTexW / (float)iTexH : 2.67f;
-                                
-                                // Dynamic scaling based on distance
-                                float flIconW = std::clamp(250.f / std::max(dist, 1.f), 15.f, 45.f);
-                                float flIconH = flIconW / flAspect;
-
-                                Draw::AddImage(tex,
-                                    ImVec2(screenPos.x - flIconW * 0.5f, screenPos.y),
-                                    ImVec2(screenPos.x + flIconW * 0.5f, screenPos.y + flIconH),
-                                    colWeapon);
-                                
-                                flBottomY = screenPos.y + flIconH;
-                                bDrawnIcon = true;
-                            }
-                        }
-
-                        if (!bDrawnIcon)
-                        {
-                            std::transform(sName.begin(), sName.end(), sName.begin(), ::toupper);
-                            std::string strLabel = "[" + sName + "]";
-
-                            // Add C4 timer logic if it's planted C4
-                            if (obj.m_eType == EEntityType::ENTITY_PLANTEDC4)
-                            {
-                                float flC4Blow = g_Memory.ReadMemory<float>(pEntityPtr + uC4Blow);
-                                float flCur = g_Interfaces.m_GlobalVars.m_flCurrentTime;
-                                float flTimeLeft = flC4Blow - flCur;
-                                if (flTimeLeft < 0.f) flTimeLeft = 0.f;
-                                
-                                char szTimer[64];
-                                snprintf(szTimer, sizeof(szTimer), "[C4 PLANTED! - %.1f s]", flTimeLeft);
-                                strLabel = szTimer;
-                                
-                                bool bDefused = g_Memory.ReadMemory<bool>(pEntityPtr + uC4Defused);
-                                if (bDefused) {
-                                    strLabel = "[C4 DEFUSED!]";
-                                    colWeapon = Color(100, 255, 100, 255);
-                                }
-                                else if (flTimeLeft < 10.0f && flTimeLeft > 0.0f) {
-                                    // Flash red/yellow
-                                    if ((int)(flCur * 10) % 2 == 0) colWeapon = Color(255, 255, 0, 255);
-                                    else colWeapon = Color(255, 0, 0, 255);
-                                }
-                            }
-
-                            ImVec2 textSize = Fonts::ESP->CalcTextSizeA(Fonts::ESP->FontSize, FLT_MAX, 0.f, strLabel.c_str());
-                            Draw::AddText(Fonts::ESP, Fonts::ESP->FontSize, 
-                                          ImVec2(screenPos.x - textSize.x * 0.5f, screenPos.y), 
-                                          strLabel, colWeapon, DRAW_TEXT_DROPSHADOW, Color(0,0,0,200));
-                            
-                            flBottomY = screenPos.y + Fonts::ESP->FontSize;
-                        }
-
-                        // Draw distance below
-                        if (dist > 0.f)
-                        {
-                            char szDist[32];
-                            snprintf(szDist, sizeof(szDist), "%.0fm", dist);
-                            
-                            // Make distance text slightly smaller if possible, but keep consistent with font
-                            ImVec2 distSize = Fonts::ESP->CalcTextSizeA(Fonts::ESP->FontSize * 0.85f, FLT_MAX, 0.f, szDist);
-                            Draw::AddText(Fonts::ESP, Fonts::ESP->FontSize * 0.85f,
-                                          ImVec2(screenPos.x - distSize.x * 0.5f, flBottomY + 2.f),
-                                          szDist, Color(200, 200, 200, 200), DRAW_TEXT_DROPSHADOW, Color(0,0,0, 150));
-                        }
-                    }
-                }
+                char szDist[16];
+                snprintf(szDist, sizeof(szDist), "%.0fm", flDist);
+                ImVec2 distSize = Fonts::ESP->CalcTextSizeA(Fonts::ESP->FontSize * 0.85f, FLT_MAX, 0.f, szDist);
+                Draw::AddText(Fonts::ESP, Fonts::ESP->FontSize * 0.85f,
+                    ImVec2(screenPos.x - distSize.x * 0.5f, flTextY + textSize.y + 2.f),
+                    szDist, Color(200, 200, 200, 200), DRAW_TEXT_DROPSHADOW, Color(0, 0, 0, 150));
             }
         }
     }
@@ -949,8 +901,10 @@ void ESP::RenderWeapons(const std::vector<EntityObject_t>& vecEntities)
 
 std::vector<ESP::DamageIndicator_t> ESP::g_vecDamageIndicators;
 
-void ESP::AddDamageIndicator(Vector vecPos, int iDamage)
+void ESP::AddDamageIndicator(Vector vecPos, int iDamage, int iMaxHealth)
 {
+    if (iMaxHealth <= 0) iMaxHealth = 100;
+
     DamageIndicator_t text;
     text.m_vecPos = vecPos;
     // Kichik tasodifiy siljish (overlap bo'lmasligi uchun)
@@ -958,6 +912,7 @@ void ESP::AddDamageIndicator(Vector vecPos, int iDamage)
     text.m_vecPos.y += (rand() % 20) - 10.f;
     text.m_vecPos.z += (rand() % 10) - 5.f;
     text.m_iDamage = iDamage;
+    text.m_iPercent = std::clamp((int)std::lround(100.0 * iDamage / iMaxHealth), 1, 100);
     text.m_flTimeCreated = (float)ImGui::GetTime(); // Use ImGui time which is safe in RenderThread
 
     g_vecDamageIndicators.push_back(text);
@@ -997,10 +952,11 @@ void ESP::RenderDamageIndicators()
             Color shadowCol = Color(0, 0, 0, (int)(flAlpha * 255.f));
 
             char buf[32];
-            snprintf(buf, sizeof(buf), "-%d", it->m_iDamage);
+            snprintf(buf, sizeof(buf), "-%d%%", it->m_iPercent);
 
-            // Kattaroq va qalinroq font uchun default emas, balki shunchaki kattalashtiramiz
-            float flFontSize = Fonts::Default->FontSize * 1.5f;
+            // Zarar qanchalik og'ir bo'lsa, shrift shunchalik katta ko'rinadi
+            float flSeverity = std::clamp(it->m_iPercent / 100.f, 0.f, 1.f);
+            float flFontSize = Fonts::Default->FontSize * (1.3f + flSeverity * 0.7f);
             ImVec2 textSize = Fonts::Default->CalcTextSizeA(flFontSize, FLT_MAX, 0.0f, buf);
 
             Draw::AddText(Fonts::Default, flFontSize, ImVec2(vecScreen.x - textSize.x / 2.f, vecScreen.y - textSize.y / 2.f), buf, renderCol, DRAW_TEXT_OUTLINE, shadowCol);

@@ -2,6 +2,9 @@
 #include <json.hpp>
 #include <shellapi.h>
 #pragma comment(lib, "shell32.lib")
+#include "CtLoginImage.h"
+#include "TLoginImage.h"
+#include "LogoBannerImage.h"
 using json = nlohmann::json;
 
 // =====================================================================
@@ -47,25 +50,10 @@ static bool IsCS2Running()
     return found;
 }
 
-// Load a PNG sitting next to the exe into a D3D11 texture on the login
-// window's own device. Missing file / decode failure just leaves the
-// portrait blank — never fatal.
-static ID3D11ShaderResourceView* LoadPortrait(ID3D11Device* pDevice, const char* szFileName, int& iW, int& iH)
+// Uploads already-decoded RGBA pixels to a D3D11 texture on the login
+// window's own device.
+static ID3D11ShaderResourceView* CreateTextureFromRGBA(ID3D11Device* pDevice, const unsigned char* pData, int iW, int iH)
 {
-    char szExe[MAX_PATH];
-    if (!GetModuleFileNameA(NULL, szExe, MAX_PATH)) return nullptr;
-    std::string strPath(szExe);
-    const size_t pos = strPath.find_last_of("\\/");
-    if (pos != std::string::npos) strPath = strPath.substr(0, pos + 1);
-    strPath += szFileName;
-
-    std::error_code ec;
-    if (!std::filesystem::exists(strPath, ec)) return nullptr;
-
-    int iCh = 0;
-    unsigned char* pData = stbi_load(strPath.c_str(), &iW, &iH, &iCh, 4);
-    if (!pData) return nullptr;
-
     D3D11_TEXTURE2D_DESC desc = {};
     desc.Width = iW; desc.Height = iH; desc.MipLevels = 1; desc.ArraySize = 1;
     desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; desc.SampleDesc.Count = 1;
@@ -75,7 +63,6 @@ static ID3D11ShaderResourceView* LoadPortrait(ID3D11Device* pDevice, const char*
 
     ID3D11Texture2D* pTex = nullptr;
     HRESULT hr = pDevice->CreateTexture2D(&desc, &sub, &pTex);
-    stbi_image_free(pData);
     if (FAILED(hr) || !pTex) return nullptr;
 
     D3D11_SHADER_RESOURCE_VIEW_DESC srv = {};
@@ -86,6 +73,40 @@ static ID3D11ShaderResourceView* LoadPortrait(ID3D11Device* pDevice, const char*
     hr = pDevice->CreateShaderResourceView(pTex, &srv, &pSRV);
     pTex->Release();
     return SUCCEEDED(hr) ? pSRV : nullptr;
+}
+
+// Loads a PNG/JPG sitting next to the exe (so it can be swapped out without
+// a rebuild); falls back to the embedded copy compiled into the binary if
+// the loose file is missing — e.g. after an auto-update, which only
+// replaces the .exe itself and never touches files sitting beside it.
+static ID3D11ShaderResourceView* LoadPortrait(ID3D11Device* pDevice, const char* szFileName,
+    const unsigned char* pEmbedded, unsigned int uEmbeddedSize, int& iW, int& iH)
+{
+    char szExe[MAX_PATH];
+    std::string strPath;
+    if (GetModuleFileNameA(NULL, szExe, MAX_PATH))
+    {
+        strPath = szExe;
+        const size_t pos = strPath.find_last_of("\\/");
+        if (pos != std::string::npos) strPath = strPath.substr(0, pos + 1);
+        strPath += szFileName;
+    }
+
+    int iCh = 0;
+    unsigned char* pData = nullptr;
+
+    std::error_code ec;
+    if (!strPath.empty() && std::filesystem::exists(strPath, ec))
+        pData = stbi_load(strPath.c_str(), &iW, &iH, &iCh, 4);
+
+    if (!pData && pEmbedded && uEmbeddedSize > 0)
+        pData = stbi_load_from_memory(pEmbedded, static_cast<int>(uEmbeddedSize), &iW, &iH, &iCh, 4);
+
+    if (!pData) return nullptr;
+
+    ID3D11ShaderResourceView* pSRV = CreateTextureFromRGBA(pDevice, pData, iW, iH);
+    stbi_image_free(pData);
+    return pSRV;
 }
 
 // ===================================================================
@@ -165,9 +186,9 @@ bool LoginWindow::Create()
 
     ImGuiFreeType::BuildFontAtlas(io.Fonts, 0);
 
-    m_pCtTexture   = LoadPortrait(m_pDevice, "ct_login.png",   m_iCtTexW,   m_iCtTexH);
-    m_pTTexture    = LoadPortrait(m_pDevice, "t_login.png",    m_iTTexW,    m_iTTexH);
-    m_pLogoTexture = LoadPortrait(m_pDevice, "logo_banner.jpg", m_iLogoTexW, m_iLogoTexH);
+    m_pCtTexture   = LoadPortrait(m_pDevice, "ct_login.png",   g_CtLoginPng,    g_CtLoginPngSize,    m_iCtTexW,   m_iCtTexH);
+    m_pTTexture    = LoadPortrait(m_pDevice, "t_login.png",    g_TLoginPng,     g_TLoginPngSize,     m_iTTexW,    m_iTTexH);
+    m_pLogoTexture = LoadPortrait(m_pDevice, "logo_banner.jpg", g_LogoBannerJpg, g_LogoBannerJpgSize, m_iLogoTexW, m_iLogoTexH);
 
     m_bInitialized = true;
     return true;
@@ -277,6 +298,65 @@ bool LoginWindow::Run()
         ImDrawList* dl = ImGui::GetWindowDrawList();
         DrawBackdrop(dl, W, H, flPulse);
 
+        // === AUTO-UPDATE: birinchi kadrda serverdan tekshiramiz ===
+        static bool s_bUpdateChecked = false;
+        if (!s_bUpdateChecked)
+        {
+            s_bUpdateChecked = true;
+            g_Updater.CheckForUpdate();
+        }
+
+        // === UPDATE BANNER (yangi versiya bo'lsa — login qilishdan oldin ham ko'rinadi) ===
+        if (g_Updater.m_bUpdateAvailable)
+        {
+            const float flBannerH = 42.f;
+            dl->AddRectFilled({ 0.f, 0.f }, { W, flBannerH }, IM_COL32(14, 32, 26, 240));
+            dl->AddLine({ 0.f, flBannerH }, { W, flBannerH }, UI::Fade(UI::COL_GREEN, 0.55f), 1.5f);
+
+            char szMsg[128];
+            snprintf(szMsg, sizeof(szMsg), "Yangi versiya mavjud: v%s", g_Updater.m_strLatestVersion.c_str());
+            if (Fonts::Small) ImGui::PushFont(Fonts::Small);
+            ImVec2 ts = ImGui::CalcTextSize(szMsg);
+            dl->AddText({ 20.f, (flBannerH - ts.y) * 0.5f }, UI::COL_GREEN, szMsg);
+            if (Fonts::Small) ImGui::PopFont();
+
+            if (g_Updater.m_bDownloading)
+            {
+                const float bw = 220.f, bh = 16.f;
+                ImVec2 p(W - bw - 56.f, (flBannerH - bh) * 0.5f);
+                dl->AddRectFilled(p, { p.x + bw, p.y + bh }, IM_COL32(10, 14, 21, 255), 3.f);
+                dl->AddRect(p, { p.x + bw, p.y + bh }, UI::Fade(UI::COL_CYAN, 0.5f), 3.f, 0, 1.f);
+                float flFill = ImClamp(g_Updater.m_flProgress, 0.f, 1.f) * (bw - 4.f);
+                if (flFill > 0.f)
+                    dl->AddRectFilled({ p.x + 2.f, p.y + 2.f }, { p.x + 2.f + flFill, p.y + bh - 2.f }, UI::COL_CYAN, 2.f);
+
+                char szPct[16];
+                snprintf(szPct, sizeof(szPct), "%d%%", (int)(ImClamp(g_Updater.m_flProgress, 0.f, 1.f) * 100.f));
+                if (Fonts::Small) ImGui::PushFont(Fonts::Small);
+                ImVec2 tsPct = ImGui::CalcTextSize(szPct);
+                dl->AddText({ p.x + (bw - tsPct.x) * 0.5f, p.y + (bh - tsPct.y) * 0.5f }, UI::COL_TEXT, szPct);
+                if (Fonts::Small) ImGui::PopFont();
+            }
+            else if (g_Updater.m_bDownloadComplete)
+            {
+                ImGui::SetCursorPos({ W - 296.f, (flBannerH - 28.f) * 0.5f });
+                if (UI::Button("O'RNATISH VA QAYTA ISHGA TUSHIRISH", { 240.f, 28.f }, UI::BTN_SUCCESS))
+                    g_Updater.ApplyUpdate();
+            }
+            else if (g_Updater.m_bDownloadFailed)
+            {
+                ImGui::SetCursorPos({ W - 196.f, (flBannerH - 28.f) * 0.5f });
+                if (UI::Button("QAYTA URINISH", { 140.f, 28.f }, UI::BTN_WARN))
+                    g_Updater.StartDownload();
+            }
+            else
+            {
+                ImGui::SetCursorPos({ W - 196.f, (flBannerH - 28.f) * 0.5f });
+                if (UI::Button("YANGILASH", { 140.f, 28.f }, UI::BTN_PRIMARY))
+                    g_Updater.StartDownload();
+            }
+        }
+
         // === CLOSE BUTTON ===
         {
             ImGui::SetCursorPos({ W - 38.f, 12.f });
@@ -301,7 +381,9 @@ bool LoginWindow::Run()
         // ===============================================================
         if (ePhase == EPhase::LOGIN)
         {
-            const float fW = 360.f, fX = (W - fW) * 0.5f;
+            // CT/T portretlari 26..326 va (W-326)..(W-26) oralig'ini egallaydi —
+            // login karta shu ikkisi orasiga sig'ishi kerak, aks holda ustiga tushadi.
+            const float fW = 280.f, fX = (W - fW) * 0.5f;
 
             // --- faction portraits (flanking the login card) ---
             auto DrawFaction = [&](ID3D11ShaderResourceView* pTex, int texW, int texH,
@@ -454,25 +536,22 @@ bool LoginWindow::Run()
                     for (int i = 0; i < nSteps; i++) { steps[i].prog = 0; steps[i].done = false; }
                     bCS2Found = false;
 
-                    // === asosiy featurelarni avtomatik yoqamiz ===
+                    // === asosiy (ko'rish) featurelarni avtomatik yoqamiz ===
+                    // Aim / Trigger / Bhop ataylab yoqilmaydi — bular
+                    // foydalanuvchi o'zi xohlasa qo'lda yoqadigan narsalar.
                     CONFIG_GET(bool, g_Variables.m_PlayerVisuals.m_bEnableVisuals) = true;
                     CONFIG_GET_ARRAY(bool, g_Variables.m_PlayerVisuals.m_vecVisualsModifiers, VISUALS_IGNORE_TEAMMATES) = true;
                     CONFIG_GET(bool, g_Variables.m_PlayerVisuals.m_bDrawBox) = true;
                     CONFIG_GET(bool, g_Variables.m_PlayerVisuals.m_bDrawHealthBar) = true;
                     CONFIG_GET(bool, g_Variables.m_PlayerVisuals.m_bDrawWeapon) = true;
                     CONFIG_GET(bool, g_Variables.m_PlayerVisuals.m_bDrawHasC4) = true;
+                    CONFIG_GET(bool, g_Variables.m_PlayerGlow.m_bEnableGlow) = true;
                     CONFIG_GET(bool, g_Variables.m_Misc.m_bSniperCrosshair) = true;
                     CONFIG_GET(bool, g_Variables.m_SpectatorList.m_bEnableSpectatorList) = true;
                     CONFIG_GET(bool, g_Variables.m_Misc.m_bAntiFlash) = true;
                     CONFIG_GET(bool, g_Variables.m_Misc.m_bC4Timer) = true;
                     CONFIG_GET(bool, g_Variables.m_Misc.m_bGrenadeWarning) = true;
                     CONFIG_GET(bool, g_Variables.m_Misc.m_bWatermark) = true;
-
-                    // === MID / PRO featurelari ===
-                    CONFIG_GET(bool, g_Variables.m_Bhop.m_bEnableBhop) = true;
-                    CONFIG_GET(bool, g_Variables.m_TriggerBot.m_bEnableTriggerbot) = true;
-                    CONFIG_GET(bool, g_Variables.m_AimBot.m_bEnableAimbot) = true;
-                    CONFIG_GET(bool, g_Variables.m_PlayerGlow.m_bEnableGlow) = true;
                 }
             }
 
